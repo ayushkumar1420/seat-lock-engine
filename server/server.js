@@ -1,9 +1,13 @@
 const express = require('express');
+const Redis = require("./src/config/redis")
+
 const dns=require('dns')
 dns.setServers(['8.8.8.8','8.8.4.4'])
+
 const dotenv = require("dotenv")
 dotenv.config()
 const cors = require("cors")
+
 const connectDB = require("./src/config/db")
 connectDB();
 
