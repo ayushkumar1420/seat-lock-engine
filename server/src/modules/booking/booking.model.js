@@ -1,11 +1,10 @@
-const { ObjectId } = require('mongodb')
-const mongoose = require('mongoose')
+const mongoose = require("mongoose");
 
 const bookingSchema = new mongoose.Schema({
     
     showtimeId: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'showtime',
+        ref: "showtime",
         required: true
     },
 
@@ -20,8 +19,8 @@ const bookingSchema = new mongoose.Schema({
     }],
 
     totalAmount: {
-        type: String,
-        required: truu
+        type: Number,
+        required: true
     },
 
     status: {
