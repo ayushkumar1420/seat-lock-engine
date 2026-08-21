@@ -14,8 +14,8 @@ const lockSeats = async (req, res)  => {
             });
         }
 
-        const lockKeys = seat.map(
-            (seat) =>  `seat:${showtimeId}:${seat}`
+        const lockKeys = seats.map(
+            (seat) =>  `seats:${showtimeId}:${seat}`
         );
 
         //check krne k liye seat already lock h ya nhi
