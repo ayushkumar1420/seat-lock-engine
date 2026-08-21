@@ -1,6 +1,6 @@
 const express = require("express");
 
-const bookingRoutes = require("./modules/booking/booking.routes");
+const bookingRoutes = require('./src/modules/booking/booking.routes.js');
 
 const app = express();
 

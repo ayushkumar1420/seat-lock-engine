@@ -5,5 +5,4 @@ const router = express.Router();
 
 router.post("/lock", lockSeats);
 
-
-modules.exports = router;
+module.exports = router;
