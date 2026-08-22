@@ -30,6 +30,27 @@ const lockSeats = async (req, res)  => {
         //4. setting expiration on all seats
         //5. return 1
 
+        const lockSeats = ` 
+        for _, key in ipairs(KEYS) do 
+        if redis.call("EXISTS", key) == 1 then
+        return 0
+        end
+        end
+        
+        for _, key in ipairs(KEYS) do
+        redis.call("SET", key, ARGV[1], "EX", ARGV[2])
+        end
+        
+        return 1
+        `;
+
+        const result = await redis.eval( lockScript, seatKeys.length, ...seatKeys, userId, LOCK_DURATION);
+
+        if (result === 0) {
+            return res.status(409).json({
+                message: "seats are already locked",
+            });
+        }
 
         const expiresAt = new Date( Date.now() + LOCK_DURATION * 1000 );
 
