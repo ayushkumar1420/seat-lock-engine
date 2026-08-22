@@ -1,5 +1,4 @@
 const redis = require("../config/redis");
-
 const Booking = require("../modules/booking/booking.model");
 
 const LOCK_DURATION = 10 * 60;
@@ -18,21 +17,19 @@ const lockSeats = async (req, res)  => {
             (seat) =>  `seats:${showtimeId}:${seat}`
         );
 
-        //check krne k liye seat already lock h ya nhi
-        const existingLocks = await redis.mget(lockKeys);
+        
+        //lua script - ek scripting language hai jo ki use hota h complex running,
+        //atomic operation directly on the server tp reduce network latency and,
+        //ensure data consistency(typo for redis).
+        //atomic operation - ek aisa action that executes as a single, indivisual unit.(it follows "all-or-nothing" rule)
 
-        const alreadyLocked = existingLocks.some((lock) => lock !== null);
+        //luascript: 
+        //1. check whether any seats is already locked
+        //2. if yes return 0
+        //3. if no lock all the seats
+        //4. setting expiration on all seats
+        //5. return 1
 
-        if(alreadyLocked){
-            return res.status(409).json({
-                message: "seats are already locked",
-            })
-        }
-
-        // to lock all seats
-        for (const key of lockKeys){
-            await redis.set(key, userId, "EX", LOCK_DURATION);
-        }
 
         const expiresAt = new Date( Date.now() + LOCK_DURATION * 1000 );
 
