@@ -7,13 +7,13 @@ const lockSeats = async (req, res)  => {
     try {
         const { showtimeId, userId, seats, totalAmount } = req.body;
 
-        if(!showtimeId || !userId || !seats || !totalAmount ){
+        if(!showtimeId || !userId || !seats || seats.length === 0 || totalAmount === undefined ){
             return res.status(400).json({
                 message: "all fields are required"
             });
         }
 
-        const lockKeys = seats.map(
+        const seatKeys = seats.map(
             (seat) =>  `seats:${showtimeId}:${seat}`
         );
 
@@ -30,7 +30,7 @@ const lockSeats = async (req, res)  => {
         //4. setting expiration on all seats
         //5. return 1
 
-        const lockSeats = ` 
+        const lockScript = ` 
         for _, key in ipairs(KEYS) do 
         if redis.call("EXISTS", key) == 1 then
         return 0
