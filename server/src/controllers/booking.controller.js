@@ -63,15 +63,34 @@ const lockSeats = async (req, res)  => {
 
         const expiresAt = new Date( Date.now() + LOCK_DURATION * 1000 );
 
-        // to create a pending bookings
-        const booking = await Booking.create({
-            showtimeId,
-            userId,
-            seats,
-            totalAmount,
-            status: "PENDING",
-            expiresAt,
+        // to create a pending bookings using trycatch
+        let booking;
+        try {
+
+            booking = await Booking.create({
+                showtimeId,
+                userId,
+                seats,
+                totalAmount,
+                status: "PENDING",
+                expiresAt,
+            });
+
+        } catch (error) {
+            console.error("mongodb booking creation failed", error);
+        
+            await redis.eval(
+                unlockScript,
+                seatKeys.length,
+                ...seatKeys,
+                userId
+            );
+        }
+
+        return res.status(500).json({
+            message: "booking creation failed, seat locks released",
         });
+        
 
         return res.status(201).json({
             message: "seats locked",
