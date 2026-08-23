@@ -44,6 +44,15 @@ const lockSeats = async (req, res)  => {
         return 1
         `;
 
+        const unlockScript = `
+        for _, key in ipairs(KEYS) do
+        if redis.call("GET", key) == ARGV[1] then
+        redis.call("DEL", key)
+        end
+        end
+        return 1
+        `;
+
         const result = await redis.eval( lockScript, seatKeys.length, ...seatKeys, userId, LOCK_DURATION);
 
         if (result === 0) {
