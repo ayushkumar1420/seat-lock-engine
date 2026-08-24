@@ -85,11 +85,11 @@ const lockSeats = async (req, res)  => {
                 ...seatKeys,
                 userId
             );
-        }
 
-        return res.status(500).json({
-            message: "booking creation failed, seat locks released",
-        });
+            return res.status(500).json({
+                message: "booking creation failed, seat locks released",
+            });
+        }
         
 
         return res.status(201).json({
