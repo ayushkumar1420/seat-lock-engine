@@ -1,5 +1,5 @@
-const Booking = requrie("../modules/booking/booking.model");
-const redis = requrie("../config/redis");
+const Booking = require("../modules/booking/booking.model");
+const redis = require("../config/redis");
 
 const checkExpiredBookings = async () => {
     try {

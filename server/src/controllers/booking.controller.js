@@ -108,4 +108,76 @@ const lockSeats = async (req, res)  => {
     }
 }
 
-module.exports = { lockSeats, }
+const confirmBooking = async (req, res) => {
+    try {
+        const { bookingId, userId } = req.body
+
+        if( !bookingId || !userId ){
+            return res.status(400).json({
+                message: "bookingId and userId are required",
+            });
+        }
+
+        // to find the pending bookings
+        const booking = await Booking.findOne({
+            _id: bookingId,
+            userId,
+            status: "PENDING",
+        });
+
+        if(!booking) {
+            return res.status(404).json({
+                message: "pending booking not found",
+            });
+        }
+
+        // to check that booking is expired or not
+        if(booking.expiresAt <= new Date()){
+            booking.status = "EXPIRED";
+            await booking.save();
+
+            return res.status(400).json({
+                message: "booking has expired"
+            });
+        }
+
+        booking.status = "SUCCESS";
+        await booking.save();
+
+        // now remove the temporary redis locks
+        const seatKeys = booking.seats.map(
+            (seat) => `seats:${booking.showtimeId}:${seat}`
+        );
+
+        const unlockScript = `
+            for _, key in ipairs(KEYS) do
+            if redis.call("GET", key) == ARGV[1] then
+            redis.call("DEL", key)
+            end
+            end
+            return 1`;
+
+        await redis.eval(
+            unlockScript,
+            seatKeys.length,
+            ...seatKeys,
+            userId
+        );
+
+        return res.status(200).json({
+            message: "Booking confirmed successfully",
+            bookingId: booking._id,
+            status: booking.status,
+            seats: booking.seats,
+        });
+
+    } catch (error) {
+        console.error((" booking confirmation error:", error));
+        
+        return res.status(500).json({
+            message: "failed to confirm booking",
+        });
+    }
+};
+
+module.exports = { lockSeats, confirmBooking }
