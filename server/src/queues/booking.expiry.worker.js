@@ -51,6 +51,7 @@ const checkExpiredBookings = async () => {
 const startBookingExpiryWorker = () => {
     console.log("booking expiry worker started");
 
+    // hrr 10 second pe check krne k liye
     setInterval(checkExpiredBookings, 10 * 1000);
 };
 

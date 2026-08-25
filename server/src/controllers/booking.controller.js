@@ -1,7 +1,7 @@
 const redis = require("../config/redis");
 const Booking = require("../modules/booking/booking.model");
 
-const LOCK_DURATION = 10 * 60;
+const LOCK_DURATION = 120;
 
 const lockSeats = async (req, res)  => {
     try {
