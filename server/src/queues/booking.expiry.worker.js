@@ -1,7 +1,7 @@
 const Booking = requrie("../modules/booking/booking.model");
 const redis = requrie("../config/redis");
 
-const checkExpiredBooking = async () => {
+const checkExpiredBookings = async () => {
     try {
         const  now = new Date();
 
@@ -19,9 +19,41 @@ const checkExpiredBooking = async () => {
                 (seat) => `seat: ${booking.showtimeId}:${seat}`
             );
 
-            
+            //if the booking user exists then it only delete redis locks which belogs to that
+            const unlockScript = `
+            for _, key in ipairs(KEYS) do
+            if redis.call("GET", key) == ARGV[1] then
+            redis.call("DEL", key)
+            end
+            end
+            return 1`;
+
+            await redis.eval(
+                unlockScript,
+                seatKeys.length,
+                ...seatKeys,
+                booking.userId
+            );
+
+            booking.status = "EXPIRED";
+
+            await booking.save();
+
+            console.log(
+                `Booking ${booking._id} expired. seats released.`
+            );   
         }
     } catch (error) {
-        
+        console.error("Booking expiry worker error:", error);
     }
+};
+
+const startBookingExpiryWorker = () => {
+    console.log("booking expiry worker started");
+
+    setInterval(checkExpiredBookings, 10 * 1000);
+};
+
+module.exports = {
+    startBookingExpiryWorker
 }
