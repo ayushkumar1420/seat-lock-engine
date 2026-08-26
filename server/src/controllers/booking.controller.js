@@ -1,5 +1,7 @@
+const mongoose = require("mongoose");
 const redis = require("../config/redis");
 const Booking = require("../modules/booking/booking.model");
+const Seat = require("../modules/seat/seat.model");
 
 const LOCK_DURATION = 120;
 
@@ -25,7 +27,7 @@ const lockSeats = async (req, res)  => {
             });
         }
 
-        
+
         const seatKeys = seats.map(
             (seat) =>  `seats:${showtimeId}:${seat}`
         );
@@ -154,8 +156,55 @@ const confirmBooking = async (req, res) => {
             });
         }
 
-        booking.status = "SUCCESS";
-        await booking.save();
+        // booking.status = "SUCCESS";
+        // await booking.save();
+
+        const session = await mongoose.startSession();
+
+        try {
+            session.startTransaction();
+
+            for (const seatNumber of booking.seat){
+                const seat = await Seat.findOneAndUpdate(
+                    {
+                        showtimeId: booking.showtimeId,
+                        seatNumber,
+                        status: "AVAILABLE",
+                    },
+                    {
+                        $set: {
+                            status: "BOOKED",
+                            bookingId: booking._id,
+                        },
+                    },
+                    {
+                        new: true,
+                        session,
+                    }
+                );
+
+                if(!seat) {
+                    throw new Error(
+                        `Seat ${seatNumber} is already booked or doesn't exist`
+                    );
+                }
+            }
+
+            booking.status = "SUCCESS";
+            await booking.save({ session });
+            await session.commitTransaction();
+
+        } catch (error) {
+            await session.abortTransaction();
+            console.error("booking confirmation failed", error);
+
+            return res.status(409).json({
+                message: "one or more seats could not be booked",
+            });
+        } finally {
+            session.endSession();
+        }
+
 
         // now remove the temporary redis locks
         const seatKeys = booking.seats.map(
