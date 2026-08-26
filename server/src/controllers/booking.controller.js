@@ -13,6 +13,19 @@ const lockSeats = async (req, res)  => {
             });
         }
 
+        const alreadyBooked = await Booking.findOne({
+            showtimeId,
+            seats: { $in: seats },
+            status: "SUCCESS",
+        });
+
+        if (alreadyBooked) {
+            return res.status(409).json({
+                message: "seats are already booked"
+            });
+        }
+
+        
         const seatKeys = seats.map(
             (seat) =>  `seats:${showtimeId}:${seat}`
         );
