@@ -31,4 +31,11 @@ const seatSchema = new mongoose.Schema(
     },
 );
 
+// to make it one seat available only once for a particular showtime
+seatSchema.index(
+    { showtimeId: 1, seatNumber: 1 },
+    { unique: true }
+);
+
+
 module.exports = mongoose.model("Seat", seatSchema)
