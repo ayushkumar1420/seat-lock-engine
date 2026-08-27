@@ -1,7 +1,29 @@
 const mongoose = require("mongoose")
 
-const bookingModel = new mongoose.Schema({
+const showtimeSchema = new mongoose.Schema({
     
-})
+    movieId: {
+        type: mongoose.Schema.Types.ObjectId,
+        required: true,
+    },
 
-module.exports = mongoose.model("Showtime", bookingModel)
+    screenId: {
+        type: mongoose.Schema.Types.ObjectId,
+        required: true,
+    },
+
+    startTime: {
+        type: Date,
+        required: true,
+    },
+
+    ticketPrice: {
+        type: Number,
+        required: true,
+    },
+
+}, {
+    timestamps: true,
+});
+
+module.exports = mongoose.model("Showtime", showtimeSchema)
