@@ -160,101 +160,117 @@ const lockSeats = async (req, res)  => {
     }
 }
 
-const confirmBooking = async (req, res) => {
-    try {
-        const { bookingId, userId } = req.body
 
-        if( !bookingId || !userId ){
+const confirmBooking = async (req, res) => {
+    const session = await mongoose.startSession();
+
+    try {
+        const { bookingId, userId } = req.body;
+
+        if (!bookingId || !userId) {
             return res.status(400).json({
                 message: "bookingId and userId are required",
             });
         }
 
-        // to find the pending bookings
+        // Find pending booking
         const booking = await Booking.findOne({
             _id: bookingId,
             userId,
             status: "PENDING",
         });
 
-        if(!booking) {
+        if (!booking) {
             return res.status(404).json({
-                message: "pending booking not found",
+                message: "Pending booking not found",
             });
         }
 
-        // to check that booking is expired or not
-        if(booking.expiresAt <= new Date()){
+        // Check booking expiry
+        if (booking.expiresAt <= new Date()) {
             booking.status = "EXPIRED";
             await booking.save();
 
-            return res.status(400).json({
-                message: "booking has expired"
-            });
-        }
-
-        // booking.status = "SUCCESS";
-        // await booking.save();
-
-        const session = await mongoose.startSession();
-
-        try {
-            session.startTransaction();
-
-            for (const seatNumber of booking.seat){
-                const seat = await Seat.findOneAndUpdate(
-                    {
-                        showtimeId: booking.showtimeId,
-                        seatNumber,
-                        status: "AVAILABLE",
-                    },
-                    {
-                        $set: {
-                            status: "BOOKED",
-                            bookingId: booking._id,
-                        },
-                    },
-                    {
-                        new: true,
-                        session,
-                    }
-                );
-
-                if(!seat) {
-                    throw new Error(
-                        `Seat ${seatNumber} is already booked or doesn't exist`
-                    );
-                }
-            }
-
-            booking.status = "SUCCESS";
-            await booking.save({ session });
-            await session.commitTransaction();
-
-        } catch (error) {
-            await session.abortTransaction();
-            console.error("booking confirmation failed", error);
-
             return res.status(409).json({
-                message: "one or more seats could not be booked",
+                message: "Booking has expired",
             });
-        } finally {
-            session.endSession();
         }
 
-
-        // now remove the temporary redis locks
         const seatKeys = booking.seats.map(
             (seat) => `seats:${booking.showtimeId}:${seat}`
         );
 
+        // Verify that this user still owns every Redis lock
+        const verifyLocksScript = `
+            for _, key in ipairs(KEYS) do
+                if redis.call("GET", key) ~= ARGV[1] then
+                    return 0
+                end
+            end
+
+            return 1
+        `;
+
+        const ownsLocks = await redis.eval(
+            verifyLocksScript,
+            seatKeys.length,
+            ...seatKeys,
+            userId
+        );
+
+        if (ownsLocks === 0) {
+            return res.status(409).json({
+                message: "Seat lock has expired or is no longer owned by this user",
+            });
+        }
+
+        // Start MongoDB transaction
+        session.startTransaction();
+
+        for (const seatNumber of booking.seats) {
+            const seat = await Seat.findOneAndUpdate(
+                {
+                    showtimeId: booking.showtimeId,
+                    seatNumber,
+                    status: "AVAILABLE",
+                },
+                {
+                    $set: {
+                        status: "BOOKED",
+                        bookingId: booking._id,
+                    },
+                },
+                {
+                    new: true,
+                    session,
+                }
+            );
+
+            if (!seat) {
+                throw new Error(
+                    `Seat ${seatNumber} is already booked or does not exist`
+                );
+            }
+        }
+
+        // Booking becomes successful in the SAME transaction
+        booking.status = "SUCCESS";
+
+        await booking.save({ session });
+
+        await session.commitTransaction();
+
+        // Only after MongoDB commit succeeds,
+        // remove temporary Redis locks
         const unlockScript = `
             for _, key in ipairs(KEYS) do
-            if redis.call("GET", key) == ARGV[1] then
-            redis.call("DEL", key)
+                if redis.call("GET", key) == ARGV[1] then
+                    redis.call("DEL", key)
+                end
             end
-            end
-            return 1`;
+
+            return 1
+        `;
 
         await redis.eval(
             unlockScript,
@@ -266,16 +282,24 @@ const confirmBooking = async (req, res) => {
         return res.status(200).json({
             message: "Booking confirmed successfully",
             bookingId: booking._id,
-            status: booking.status,
+            status: "SUCCESS",
             seats: booking.seats,
         });
 
     } catch (error) {
-        console.error((" booking confirmation error:", error));
-        
-        return res.status(500).json({
-            message: "failed to confirm booking",
+
+        if (session.inTransaction()) {
+            await session.abortTransaction();
+        }
+
+        console.error("Booking confirmation error:", error);
+
+        return res.status(409).json({
+            message: error.message || "Failed to confirm booking",
         });
+
+    } finally {
+        await session.endSession();
     }
 };
 
