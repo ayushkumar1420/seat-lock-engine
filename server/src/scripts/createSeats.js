@@ -6,7 +6,8 @@ const Seat = require("../modules/seat/seat.model");
 dotenv.config();
 
 const showtimeId = process.argv[2];
-if (!showtimId){
+
+if (!showtimeId){
     console.error("please provide a showtimeId");
     process.exit(1);
 }

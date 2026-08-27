@@ -3,29 +3,66 @@ const redis = require("../config/redis");
 const Booking = require("../modules/booking/booking.model");
 const Seat = require("../modules/seat/seat.model");
 
-const LOCK_DURATION = 120;
+const LOCK_DURATION = 10 * 60;
 
 const lockSeats = async (req, res)  => {
     try {
         const { showtimeId, userId, seats, totalAmount } = req.body;
 
-        if(!showtimeId || !userId || !seats || seats.length === 0 || totalAmount === undefined ){
+        if(!showtimeId || !userId || !Array.isArray(seats) || !seats || seats.length === 0 || totalAmount === undefined ){
             return res.status(400).json({
                 message: "all fields are required"
             });
         }
 
-        const alreadyBooked = await Booking.findOne({
-            showtimeId,
-            seats: { $in: seats },
-            status: "SUCCESS",
-        });
+        // const alreadyBooked = await Booking.findOne({
+        //     showtimeId,
+        //     seats: { $in: seats },
+        //     status: "SUCCESS",
+        // });
+        // now the check is removed at this place we use seat collection
 
-        if (alreadyBooked) {
-            return res.status(409).json({
-                message: "seats are already booked"
+
+        // Remove duplicate seat numbers from the request
+        const uniqueSeats = [...new Set(seats)];
+
+        if (uniqueSeats.length !== seats.length) {
+            return res.status(400).json({
+                message: "Duplicate seats are not allowed",
             });
         }
+
+        // Check that all requested seats exist
+        const existingSeats = await Seat.find({
+            showtimeId,
+            seatNumber: { $in: seats },
+        });
+
+        if (existingSeats.length !== seats.length) {
+            return res.status(400).json({
+                message:
+                    "One or more requested seats do not exist for this showtime",
+            });
+        }
+
+
+        //permanent booking check krne k liye 
+        const bookedSeats = existingSeats.filter(
+            (seat) => seat.status === "BOOKED"
+        ); 
+
+        if (bookedSeats.length > 0) {
+            return res.status(409).json({
+                message: "One or more seats are permanently booked",
+                seats: bookedSeats.map((seat) => seat.seatNumber),
+            });
+        }
+
+        // if (alreadyBooked) {
+        //     return res.status(409).json({
+        //         message: "seats are already booked"
+        //     });
+        // }
 
 
         const seatKeys = seats.map(
