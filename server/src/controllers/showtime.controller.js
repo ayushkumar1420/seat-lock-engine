@@ -35,9 +35,32 @@ const createShowtime = async (req, res) => {
             }
         );
 
-        
+        //automatically generate seat inventory
+        await createSeatInventory(
+            showtime._id,
+            session
+        );
+
+        await session.commitTransaction();
+
+        return res.status(201).json({
+            message: "showtime created successfully",
+            showtimeId: showtime._id,
+        });
+
     } catch (error) {
+        if (session.inTransaction()) {
+            await session.abortTransaction();
+        }
+
+        console.error("showtime creation error", error);
         
+        return res.status(500).json({
+            message: "failed to create showtime",
+        });
+
+    } finally {
+        await session.endSession();
     }
 }
 
