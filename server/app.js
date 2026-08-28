@@ -1,7 +1,7 @@
 const express = require("express");
 
 const bookingRoutes = require('./src/modules/booking/booking.routes.js');
-const showtimeRoutes = require(".src/modules/catalog/showtime.routes");
+const showtimeRoutes = require("./src/modules/catalog/showtime.routes.js");
 
 const app = express();
 

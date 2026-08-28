@@ -32,7 +32,7 @@ const createSeatInventory = async (showtimeId, session = null) => {
         options.session = session;
     }
 
-    await Seat.buildWrite(operations, options);
+    await Seat.bulkWrite(operations, options);
 };
 
 module.exports = createSeatInventory;
