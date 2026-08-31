@@ -47,7 +47,7 @@ const createPaymentOrder = async (req, res) => {
 
         // razorpay expect krta h ki jo amount h wo paise me aaye
         // to uske liye rupee ko paise me convert krna pdega
-        const amountPaise = Math.round(Number(booking.totalAmount) * 100);
+        const amountInPaise = Math.round(Number(booking.totalAmount) * 100);
 
         const order = await razorpay.orders.create({
             amount: amountInPaise,
