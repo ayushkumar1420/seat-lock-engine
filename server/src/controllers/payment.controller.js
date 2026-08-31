@@ -87,4 +87,59 @@ const createPaymentOrder = async (req, res) => {
     }
 };
 
-module.exports = { createPaymentOrder };
+const verifyPayment = async (req, res) => {
+    try {
+        const { razorpay_order_id, razorpay_payment_id, razorpay_signature, userId } = req.body;
+
+        if ( !razorpay_order_id || !razorpay_payment_id || !razorpay_signature || !userId ) {
+            return res.status(400).json({
+                message: "payment verification fields are required"
+            });
+        }
+
+        //to find the payment records
+        const payment = await Payment.findOne({
+            razorpayOrderId: "razorpay_order_id",
+            userId,
+        });
+
+        if(!payment){
+            return res.status(404).json({
+                message: "payment record not found"
+            });
+        }
+
+        const generatedSignature = crypto.createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+        .update(razorpay_order_id + "|" + razorpay_payment_id)
+        .digest("hex");
+
+        const isValid = generatedSignature === razorpay_signature;
+
+        if(!isValid){
+            return res.status(400).json({
+                message: "invalid payment signature"
+            });
+        }
+
+        payment.razorpayPaymentId = razorpay_payment_id;
+        payment.razorpaySignature = razorpay_signature;
+
+        await payment.save();
+
+        return res.status(200).json({
+            message: "payment signature verified",
+            paymentId: payment._id,
+            bookingId: payment.bookingId,
+        });
+
+    } catch (error) {
+        console.error("payment verification error", error);
+
+        return res.status(500).json({
+            message: "failed to verify payment",
+        })
+        
+    }
+}
+
+module.exports = { createPaymentOrder, verifyPayment };
