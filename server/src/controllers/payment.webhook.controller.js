@@ -138,9 +138,34 @@ const razorpayWebhook = async (req, res) => {
         }
         await session.commitTransaction();
 
-        
+        //mongodb is now the prmanent source of truth, now remove redis temporary locks after commit
+        const seatKeys = booking.seats.map((seat) => `seats:${booking.showtimeId}:${seat}`);
+
+        const unlockScript = `
+        for _, key in ipairs(KEYS) do
+        if redis.call("GET", key) == ARGV[1] then
+        redis.call("DEL", key)
+        end
+        end
+        return 1`;
+
+        await redis.eval( unlockScript, seatKeys.length, ...seatKeys, bookinguserId );
+        return res.status(200).json({
+            message: "payment processed and booking confirmed"
+        });
 
     } catch (error) {
-        
+        if (session.inTransaction()) {
+            await session.abortTransaction();
+        }
+        console.error("razorpay webhook error", error);
+
+        return res.status(500).json({
+            message: "webhook processing failed",
+        });
+    } finally {
+        await session.endSession();
     }
-}
+};
+
+module.exports = { razorpayWebhook };
