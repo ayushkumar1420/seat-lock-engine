@@ -45,6 +45,13 @@ const paymentSchema = new mongoose.Schema(
             type: String,
             default: null,
         },
+
+        razorpayEventId: {
+            type: String,
+            default: null,
+            index: true,
+        },
+        
     },
     {
         timestamps: true,
