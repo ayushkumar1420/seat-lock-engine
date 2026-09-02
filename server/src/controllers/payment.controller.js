@@ -71,7 +71,7 @@ const createPaymentOrder = async (req, res) => {
         return res.status(201).json({
             message: "payment order created",
             paymentId: payment._id,
-            orderId: order._id,
+            orderId: order.id,
             amount: order.amount,
             currency: order.currency,
             keyId: process.env.RAZORPAY_KEY_ID,

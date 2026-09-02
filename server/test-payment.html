@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Razorpay Payment Test</title>
+</head>
+
+<body>
+
+<button id="payBtn">
+    Pay ₹250
+</button>
+
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+
+<script>
+
+const options = {
+
+    key: "rzp_test_TVAW15p4gVn3hR",
+
+    amount: 25000,
+
+    currency: "INR",
+
+    name: "Seat Lock Engine",
+
+    description: "Seat Booking Payment",
+
+    order_id: "order_TXB7nUMXlBgjQT",
+
+    handler: async function (response) {
+
+        console.log(
+            "Razorpay response:",
+            response
+        );
+
+        const verifyResponse = await fetch(
+            "http://localhost:5000/api/payments/verify",
+            {
+                method: "POST",
+
+                headers: {
+                    "Content-Type": "application/json"
+                },
+
+                body: JSON.stringify({
+
+                    razorpay_order_id:
+                        response.razorpay_order_id,
+
+                    razorpay_payment_id:
+                        response.razorpay_payment_id,
+
+                    razorpay_signature:
+                        response.razorpay_signature,
+
+                    userId:
+                        "payment-test-user"
+
+                })
+            }
+        );
+
+        const data =
+            await verifyResponse.json();
+
+        console.log(
+            "Verification:",
+            data
+        );
+
+        alert(
+            JSON.stringify(data)
+        );
+    }
+};
+
+document
+    .getElementById("payBtn")
+    .onclick = function () {
+
+        const razorpay =
+            new Razorpay(options);
+
+        razorpay.open();
+    };
+
+</script>
+
+</body>
+</html>
