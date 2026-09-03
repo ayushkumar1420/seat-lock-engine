@@ -2,90 +2,118 @@
 <html>
 <head>
     <title>Razorpay Payment Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; font-weight: bold; margin-bottom: 5px; }
+        input { width: 350px; padding: 8px; font-size: 14px; }
+        button { padding: 10px 20px; font-size: 16px; cursor: pointer; background: #0070f3; color: white; border: none; border-radius: 4px; }
+        #log { margin-top: 20px; background: #f4f4f4; padding: 15px; border-radius: 4px; white-space: pre-wrap; font-family: monospace; }
+    </style>
 </head>
 
 <body>
+
+<h2>Razorpay Payment Test Page</h2>
+
+<div class="form-group">
+    <label for="orderIdInput">Razorpay Order ID:</label>
+    <input type="text" id="orderIdInput" value="order_TXStVt92Sb8Fnp" placeholder="e.g. order_..." />
+</div>
+
+<div class="form-group">
+    <label for="userIdInput">User ID:</label>
+    <input type="text" id="userIdInput" value="payment-test" placeholder="e.g. payment-test" />
+</div>
+
+<div class="form-group">
+    <label for="amountInput">Amount (in paise, 25000 = ₹250):</label>
+    <input type="number" id="amountInput" value="25000" />
+</div>
 
 <button id="payBtn">
     Pay ₹250
 </button>
 
+<div id="log">Ready to start test payment.</div>
+
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 
 <script>
+function log(msg) {
+    console.log(msg);
+    document.getElementById("log").innerText += "\n" + (typeof msg === 'object' ? JSON.stringify(msg, null, 2) : msg);
+}
 
-const options = {
+document.getElementById("payBtn").onclick = function () {
+    const orderId = document.getElementById("orderIdInput").value.trim();
+    const userId = document.getElementById("userIdInput").value.trim();
+    const amount = Number(document.getElementById("amountInput").value.trim()) || 25000;
 
-    key: "rzp_test_TVAW15p4gVn3hR",
-
-    amount: 25000,
-
-    currency: "INR",
-
-    name: "Seat Lock Engine",
-
-    description: "Seat Booking Payment",
-
-    order_id: "order_TXB7nUMXlBgjQT",
-
-    handler: async function (response) {
-
-        console.log(
-            "Razorpay response:",
-            response
-        );
-
-        const verifyResponse = await fetch(
-            "http://localhost:5000/api/payments/verify",
-            {
-                method: "POST",
-
-                headers: {
-                    "Content-Type": "application/json"
-                },
-
-                body: JSON.stringify({
-
-                    razorpay_order_id:
-                        response.razorpay_order_id,
-
-                    razorpay_payment_id:
-                        response.razorpay_payment_id,
-
-                    razorpay_signature:
-                        response.razorpay_signature,
-
-                    userId:
-                        "payment-test-user"
-
-                })
-            }
-        );
-
-        const data =
-            await verifyResponse.json();
-
-        console.log(
-            "Verification:",
-            data
-        );
-
-        alert(
-            JSON.stringify(data)
-        );
+    if (!orderId) {
+        alert("Please enter a valid Razorpay order ID");
+        return;
     }
-};
 
-document
-    .getElementById("payBtn")
-    .onclick = function () {
+    log(`Initializing Razorpay checkout for order: ${orderId}, user: ${userId}`);
 
-        const razorpay =
-            new Razorpay(options);
+    const options = {
+        key: "rzp_test_TVAW15p4gVn3hR",
+        amount: amount,
+        currency: "INR",
+        name: "Seat Lock Engine",
+        description: "Seat Booking Payment",
+        order_id: orderId,
 
-        razorpay.open();
+        handler: async function (response) {
+            log("Razorpay checkout successful! Response:");
+            log(response);
+
+            try {
+                log("Calling /api/payments/verify...");
+                const verifyResponse = await fetch(
+                    "http://localhost:5000/api/payments/verify",
+                    {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify({
+                            razorpay_order_id: response.razorpay_order_id,
+                            razorpay_payment_id: response.razorpay_payment_id,
+                            razorpay_signature: response.razorpay_signature,
+                            userId: userId
+                        })
+                    }
+                );
+
+                const data = await verifyResponse.json();
+                log("Verification response status: " + verifyResponse.status);
+                log(data);
+                alert("Verification Response: " + JSON.stringify(data));
+            } catch (err) {
+                log("Verification error: " + err.message);
+                alert("Verification request failed: " + err.message);
+            }
+        },
+
+        modal: {
+            ondismiss: function () {
+                log("Checkout modal dismissed by user.");
+            }
+        }
     };
 
+    const razorpay = new Razorpay(options);
+
+    razorpay.on("payment.failed", function (response) {
+        log("Payment failed event:");
+        log(response.error);
+        alert("Payment failed: " + response.error.description);
+    });
+
+    razorpay.open();
+};
 </script>
 
 </body>

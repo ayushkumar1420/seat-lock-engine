@@ -4,7 +4,7 @@ const { razorpayWebhook } = require("../../controllers/payment.webhook.controlle
 
 const router = express.Router();
 
-router.post("/razorpay", express.raw({ type: "application/josn" }),
+router.post("/razorpay", express.raw({ type: "application/json" }),
     razorpayWebhook
 );
 

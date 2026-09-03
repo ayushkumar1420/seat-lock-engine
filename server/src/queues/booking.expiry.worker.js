@@ -15,11 +15,23 @@ const checkExpiredBookings = async () => {
         }
 
         for (const booking of expiredBookings){
-            const seatKeys = booking.seats.map(
-                (seat) => `seat: ${booking.showtimeId}:${seat}`
+            // Atomically transition from PENDING to EXPIRED to avoid racing with webhook
+            const updatedBooking = await Booking.findOneAndUpdate(
+                { _id: booking._id, status: "PENDING", expiresAt: { $lte: now } },
+                { $set: { status: "EXPIRED" } },
+                { new: true }
             );
 
-            //if the booking user exists then it only delete redis locks which belogs to that
+            if (!updatedBooking) {
+                // Booking was already finalized to SUCCESS or updated by another process
+                continue;
+            }
+
+            const seatKeys = booking.seats.map(
+                (seat) => `seats:${booking.showtimeId}:${seat}`
+            );
+
+            //if the booking user exists then it only delete redis locks which belongs to that
             const unlockScript = `
             for _, key in ipairs(KEYS) do
             if redis.call("GET", key) == ARGV[1] then
@@ -28,16 +40,16 @@ const checkExpiredBookings = async () => {
             end
             return 1`;
 
-            await redis.eval(
-                unlockScript,
-                seatKeys.length,
-                ...seatKeys,
-                booking.userId
-            );
-
-            booking.status = "EXPIRED";
-
-            await booking.save();
+            try {
+                await redis.eval(
+                    unlockScript,
+                    seatKeys.length,
+                    ...seatKeys,
+                    booking.userId
+                );
+            } catch (redisErr) {
+                console.warn("Worker failed to release redis keys:", redisErr.message);
+            }
 
             console.log(
                 `Booking ${booking._id} expired. seats released.`

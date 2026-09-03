@@ -13,10 +13,23 @@ const razorpayWebhook = async (req, res) => {
         const signature = req.headers["x-razorpay-signature"];
         const eventId = req.headers["x-razorpay-event-id"];
 
+        console.log("=== WEBHOOK RECEIVED ===");
+        console.log("Body Buffer:", Buffer.isBuffer(req.body));
+        console.log("Signature:", signature);
+        console.log("Event ID:", eventId);
+
         if (!signature) {
+            console.error("Missing x-razorpay-signature header");
             return res.status(400).json({
                 message: "missing razorpay webhook signature", 
-            })
+            });
+        }
+
+        if (!Buffer.isBuffer(req.body)) {
+            console.error("Webhook body is not a Buffer. Check raw body parser middleware.");
+            return res.status(400).json({
+                message: "raw body required for webhook signature verification",
+            });
         }
 
         //req.body must be the raw request body buffer here 
@@ -25,6 +38,10 @@ const razorpayWebhook = async (req, res) => {
         .digest("hex");
 
         if(generatedSignature !== signature) {
+            console.error("Webhook signature mismatch:", {
+                expected: generatedSignature,
+                received: signature,
+            });
             return res.status(400).json({
                 message: "invalid webhook signature",
             });
@@ -34,8 +51,11 @@ const razorpayWebhook = async (req, res) => {
             req.body.toString("utf8")
         );
 
+        console.log("Event:", payload.event);
+
         //yha pe sirf successfully captured payments se mtlb rkhenge
         if(payload.event !== "payment.captured" && payload.event !== "order.paid"){
+            console.log("Webhook event ignored:", payload.event);
             return res.status(200).json({
                 message: "webhook ignored",
             });
@@ -45,6 +65,9 @@ const razorpayWebhook = async (req, res) => {
         const razorpayOrder = payload.payload?.order?.entity;
         const razorpayOrderId = razorpayPayment?.order_id || razorpayOrder?.id;
         const razorpayPaymentId = razorpayPayment?.id;
+
+        console.log("Order ID:", razorpayOrderId);
+        console.log("Payment ID:", razorpayPaymentId);
 
         if(!razorpayOrderId){
             return res.status(400).json({
@@ -61,6 +84,7 @@ const razorpayWebhook = async (req, res) => {
             });
 
             if(alreadyProcessed){
+                console.log(`Webhook event ${eventId} already processed.`);
                 return res.status(200).json({
                     message: "webhook already processed",
                 });
@@ -69,6 +93,7 @@ const razorpayWebhook = async (req, res) => {
 
         const payment = await Payment.findOne({ razorpayOrderId });
         if(!payment) {
+            console.error("Payment record not found for razorpayOrderId:", razorpayOrderId);
             return res.status(404).json({
                 message: "payment record not found"
             });
@@ -76,25 +101,18 @@ const razorpayWebhook = async (req, res) => {
 
         //dusri idempotency check krne k liye - ho skta hai ki booking/payment pichle event me hi finalized ho gya ho
         if(payment.status === "SUCCESS"){
+            console.log(`Payment ${payment._id} already finalized.`);
             return res.status(200).json({
                 message: "payment already finalized",
             });
         }
 
-        const booking = await Booking.findOne({
-            _id: payment.bookingId,
-            status: "PENDING",
-        });
+        const booking = await Booking.findById(payment.bookingId);
 
         if(!booking){
-            return res.status(409).json({
-                message: "pending booking not found",
-            });
-        }
-
-        if(booking.expiresAt <= new Date()) {
-            return res.status(409).json({
-                message: "booking expired before payment confirmation",
+            console.error("Booking not found for payment:", payment.bookingId);
+            return res.status(404).json({
+                message: "booking not found",
             });
         }
 
@@ -110,35 +128,56 @@ const razorpayWebhook = async (req, res) => {
         },{ session });
 
         if(result.modifiedCount !== booking.seats.length ){
-            throw new Error("one or more seats are already booked");
+            console.warn(`Seats conflict: expected ${booking.seats.length} available, modified ${result.modifiedCount}`);
+            // If seats were already taken by someone else (e.g. late payment),
+            // we cannot book the seats. Mark payment as FAILED / refund needed.
+            await Payment.updateOne({
+                _id: payment._id,
+            }, {
+                $set: {
+                    status: "FAILED",
+                    razorpayPaymentId: razorpayPaymentId || payment.razorpayPaymentId || null,
+                    razorpayEventId: eventId || null,
+                }
+            }, { session });
+
+            await session.commitTransaction();
+
+            console.warn(`[PAYMENT CONFLICT]: Marked payment ${payment._id} as FAILED for refund.`);
+            return res.status(200).json({
+                message: "one or more seats are no longer available; payment marked for refund",
+            });
         }
 
-        const bookingResult = await Booking.findOne({
-            _id: booking._id, status: "PENDING",
+        const bookingResult = await Booking.updateOne({
+            _id: booking._id,
         }, {
             $set: { status: "SUCCESS" },
         }, { session });
 
-        if (bookingResult.modifiedCount !== 1){
-            throw new Error( "booking could not be finalized");
+        if (bookingResult.modifiedCount !== 1 && booking.status !== "SUCCESS"){
+            throw new Error("booking could not be finalized");
         }
 
         const paymentResult = await Payment.updateOne({
             _id: payment._id,
             status: { $ne: "SUCCESS" },
         }, {
-            $set: { status: "SUCCESS", 
-                razorpayPaymentId: razorpayPaymentId || null,
-                razorpayEventId: eventId || null
+            $set: { 
+                status: "SUCCESS", 
+                razorpayPaymentId: razorpayPaymentId || payment.razorpayPaymentId || null,
+                razorpayEventId: eventId || null,
             }
         }, { session });
 
-        if(paymentResult.modifiedCount !== 1) {
-            throw new Error("payment could not be finalized")
+        if(paymentResult.modifiedCount !== 1 && payment.status !== "SUCCESS") {
+            throw new Error("payment could not be finalized");
         }
-        await session.commitTransaction();
 
-        //mongodb is now the prmanent source of truth, now remove redis temporary locks after commit
+        await session.commitTransaction();
+        console.log(`Payment ${payment._id} and Booking ${booking._id} committed as SUCCESS`);
+
+        //mongodb is now the permanent source of truth, now remove redis temporary locks after commit
         const seatKeys = booking.seats.map((seat) => `seats:${booking.showtimeId}:${seat}`);
 
         const unlockScript = `
@@ -149,7 +188,13 @@ const razorpayWebhook = async (req, res) => {
         end
         return 1`;
 
-        await redis.eval( unlockScript, seatKeys.length, ...seatKeys, bookinguserId );
+        try {
+            await redis.eval(unlockScript, seatKeys.length, ...seatKeys, booking.userId);
+            console.log("Redis seat locks released successfully");
+        } catch (redisErr) {
+            console.warn("Failed to release redis locks after commit:", redisErr.message);
+        }
+
         return res.status(200).json({
             message: "payment processed and booking confirmed"
         });
@@ -158,10 +203,11 @@ const razorpayWebhook = async (req, res) => {
         if (session.inTransaction()) {
             await session.abortTransaction();
         }
-        console.error("razorpay webhook error", error);
+        console.error("razorpay webhook error:", error);
 
         return res.status(500).json({
             message: "webhook processing failed",
+            error: error.message,
         });
     } finally {
         await session.endSession();

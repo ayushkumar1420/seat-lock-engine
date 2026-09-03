@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const Booking = require("../modules/booking/booking.model");
 const Payment = require("../modules/payment/payment.model");
 const razorpay = require("../config/razorpay");
@@ -39,9 +40,12 @@ const createPaymentOrder = async (req, res) => {
         if (existingPayment){
             return res.status(200).json({
                 message: "payment order already exist",
+                paymentId: existingPayment._id,
                 orderId: existingPayment.razorpayOrderId,
-                amount: existingPayment.amount,
+                amount: Math.round(Number(existingPayment.amount) * 100),
                 currency: existingPayment.currency,
+                keyId: process.env.RAZORPAY_KEY_ID,
+                bookingId: booking._id,
             });
         }
 
@@ -83,6 +87,7 @@ const createPaymentOrder = async (req, res) => {
 
         return res.status(500).json({
             message: "failed to create payment order",
+            error: error.message,
         });
     }
 };
@@ -90,6 +95,13 @@ const createPaymentOrder = async (req, res) => {
 const verifyPayment = async (req, res) => {
     try {
         const { razorpay_order_id, razorpay_payment_id, razorpay_signature, userId } = req.body;
+
+        console.log("PAYMENT VERIFY RECEIVED:", {
+            razorpay_order_id,
+            razorpay_payment_id,
+            userId,
+            hasSignature: !!razorpay_signature,
+        });
 
         if ( !razorpay_order_id || !razorpay_payment_id || !razorpay_signature || !userId ) {
             return res.status(400).json({
@@ -99,11 +111,12 @@ const verifyPayment = async (req, res) => {
 
         //to find the payment records
         const payment = await Payment.findOne({
-            razorpayOrderId: "razorpay_order_id",
+            razorpayOrderId: razorpay_order_id,
             userId,
         });
 
         if(!payment){
+            console.error("Payment record not found for order:", razorpay_order_id, "userId:", userId);
             return res.status(404).json({
                 message: "payment record not found"
             });
@@ -116,6 +129,10 @@ const verifyPayment = async (req, res) => {
         const isValid = generatedSignature === razorpay_signature;
 
         if(!isValid){
+            console.error("Payment signature mismatch:", {
+                expected: generatedSignature,
+                received: razorpay_signature,
+            });
             return res.status(400).json({
                 message: "invalid payment signature"
             });
@@ -125,6 +142,8 @@ const verifyPayment = async (req, res) => {
         payment.razorpaySignature = razorpay_signature;
 
         await payment.save();
+
+        console.log(`Payment record ${payment._id} verified and updated with razorpayPaymentId and signature`);
 
         return res.status(200).json({
             message: "payment signature verified",
@@ -137,7 +156,8 @@ const verifyPayment = async (req, res) => {
 
         return res.status(500).json({
             message: "failed to verify payment",
-        })
+            error: error.message,
+        });
         
     }
 }
