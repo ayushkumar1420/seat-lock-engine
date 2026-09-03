@@ -100,7 +100,7 @@ const verifyPayment = async (req, res) => {
             razorpay_order_id,
             razorpay_payment_id,
             userId,
-            hasSignature: !!razorpay_signature,
+            hasSignature: !razorpay_signature,
         });
 
         if ( !razorpay_order_id || !razorpay_payment_id || !razorpay_signature || !userId ) {
