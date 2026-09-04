@@ -160,7 +160,6 @@ const lockSeats = async (req, res)  => {
     }
 }
 
-
 const confirmBooking = async (req, res) => {
     const session = await mongoose.startSession();
 
