@@ -9,14 +9,18 @@ function App() {
   const [selectedSeats, setSelectedSeats] = useState([]);
 
   useEffect(() => {
-    fetch(`http://localhost:5000/api/showtimes/${SHOWTIME_ID}/seats`)
-      .then((res) => res.json())
-      .then((data) => {
-        setSeats(data.seats);
-        setTicketPrice(data.ticketPrice);
-      })
-      .catch((err) => console.log(err));
-  }, []);
+  fetch(`http://localhost:5000/api/showtimes/${SHOWTIME_ID}/seats`)
+    .then((res) => res.json())
+    .then((data) => {
+      console.log(data);
+
+      setSeats(data.seats || []);
+      setTicketPrice(data.ticketPrice || 0);
+    })
+    .catch((error) => {
+      console.log("Error fetching seats:", error);
+    });
+}, []);
 
   const selectSeat = (seat) => {
     if (seat.status === "BOOKED") return;

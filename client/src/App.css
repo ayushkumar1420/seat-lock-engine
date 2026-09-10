@@ -1,240 +1,46 @@
-* {
-  box-sizing: border-box;
-}
-
 body {
   margin: 0;
-  font-family:
-    Inter,
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    sans-serif;
-  background: #0b1020;
-  color: #f8fafc;
-}
-
-button {
-  font: inherit;
+  font-family: Arial, sans-serif;
+  background: #0f172a;
+  color: white;
 }
 
 .app {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 40px 20px;
-}
-
-.booking-card {
-  width: 100%;
-  max-width: 760px;
-  padding: 36px;
-  border-radius: 24px;
-  background: #111827;
-  border: 1px solid #253047;
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
-}
-
-.booking-header {
+  max-width: 600px;
+  margin: 60px auto;
   text-align: center;
-}
-
-.eyebrow {
-  margin: 0 0 8px;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: #60a5fa;
-}
-
-.booking-header h1 {
-  margin: 0;
-  font-size: clamp(30px, 5vw, 46px);
-}
-
-.subtext {
-  margin-top: 10px;
-  color: #94a3b8;
-}
-
-.screen {
-  width: 78%;
-  margin: 38px auto 42px;
-  padding: 9px;
-  border-radius: 50% 50% 8px 8px;
-  text-align: center;
-  font-size: 12px;
-  letter-spacing: 0.18em;
-  color: #94a3b8;
-  background: linear-gradient(
-    180deg,
-    #dbeafe,
-    #93c5fd
-  );
-  box-shadow: 0 12px 35px rgba(96, 165, 250, 0.18);
 }
 
 .seat-map {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.seat-row {
   display: grid;
-  grid-template-columns:
-    32px
-    repeat(4, minmax(60px, 1fr));
-  gap: 14px;
-  align-items: center;
-}
-
-.row-label {
-  color: #64748b;
-  font-weight: 700;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin: 30px 0;
 }
 
 .seat {
-  min-height: 54px;
-  border: 1px solid #3b4963;
-  border-radius: 13px 13px 8px 8px;
-  color: #dbeafe;
-  background: #172033;
+  padding: 15px;
+  border: none;
+  border-radius: 8px;
   cursor: pointer;
-  transition:
-    transform 0.15s ease,
-    border-color 0.15s ease,
-    background 0.15s ease;
-}
-
-.seat:hover:not(:disabled) {
-  transform: translateY(-2px);
-  border-color: #60a5fa;
-}
-
-.seat.selected {
-  background: #2563eb;
-  border-color: #60a5fa;
+  background: #334155;
   color: white;
 }
 
-.seat.booked {
-  background: #343b4d;
-  border-color: #343b4d;
-  color: #64748b;
-  cursor: not-allowed;
-  text-decoration: line-through;
-}
-
-.legend {
-  display: flex;
-  justify-content: center;
-  gap: 24px;
-  flex-wrap: wrap;
-  margin: 30px 0;
-  font-size: 13px;
-  color: #94a3b8;
-}
-
-.legend span {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.legend-box {
-  width: 14px;
-  height: 14px;
-  border-radius: 4px;
-  display: inline-block;
-}
-
-.legend-box.available {
-  background: #172033;
-  border: 1px solid #3b4963;
-}
-
-.legend-box.selected {
+.selected {
   background: #2563eb;
 }
 
-.legend-box.booked {
-  background: #343b4d;
-}
-
-.summary {
-  display: flex;
-  justify-content: space-between;
-  gap: 24px;
-  margin-top: 14px;
-  padding: 22px;
-  border-radius: 16px;
-  background: #0d1526;
-  border: 1px solid #202c42;
-}
-
-.summary > div {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.summary > div:last-child {
-  text-align: right;
-}
-
-.summary-label {
-  font-size: 12px;
-  color: #64748b;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+.booked {
+  background: #555;
+  cursor: not-allowed;
 }
 
 .book-button {
-  width: 100%;
-  margin-top: 20px;
-  padding: 16px;
+  padding: 12px 25px;
   border: none;
-  border-radius: 13px;
+  border-radius: 8px;
   background: #2563eb;
   color: white;
-  font-weight: 700;
   cursor: pointer;
-  transition:
-    transform 0.15s ease,
-    background 0.15s ease;
-}
-
-.book-button:hover {
-  background: #1d4ed8;
-  transform: translateY(-1px);
-}
-
-@media (max-width: 600px) {
-  .booking-card {
-    padding: 24px 18px;
-  }
-
-  .seat-row {
-    grid-template-columns:
-      25px
-      repeat(4, minmax(45px, 1fr));
-    gap: 8px;
-  }
-
-  .seat {
-    min-height: 48px;
-    font-size: 13px;
-  }
-
-  .summary {
-    flex-direction: column;
-  }
-
-  .summary > div:last-child {
-    text-align: left;
-  }
 }
