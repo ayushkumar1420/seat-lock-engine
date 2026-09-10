@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 
 const Showtime = require("../modules/catalog/showtime.model");
 const createSeatInventory = require("../utils/createSeatInventory");
+const Seat = require("../modules/seat/seat.model");
 
 const createShowtime = async (req, res) => {
     const session = await mongoose.startSession();
@@ -75,8 +76,8 @@ const getShowtimeSeats = async (req, res) => {
             });
         }
 
-        const seats = await seatModel.find({showtimeId})
-        .select("seatnumber status")
+        const seats = await Seat.find({showtimeId})
+        .select("seatNumber status")
         .sort({seatNumber: 1});
 
         return res.status(200).json({
