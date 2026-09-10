@@ -1,141 +1,76 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import "./App.css";
 
-const seatLayout = [
-  ["A1", "A2", "A3", "A4"],
-  ["B1", "B2", "B3", "B4"],
-  ["C1", "C2", "C3", "C4"],
-];
+const SHOWTIME_ID = "6a91259edcce5321a923104d";
 
-const bookedSeats = ["A2", "C4"];
-const TICKET_PRICE = 250;
+function App() {
+  const [seats, setSeats] = useState([]);
+  const [ticketPrice, setTicketPrice] = useState(0);
+  const [selectedSeats, setSelectedSeats] = useState([]);
 
-function App(){
-  const [selectedSeats, setselectedSeats] = useState([]);
+  useEffect(() => {
+    fetch(`http://localhost:5000/api/showtimes/${SHOWTIME_ID}/seats`)
+      .then((res) => res.json())
+      .then((data) => {
+        setSeats(data.seats);
+        setTicketPrice(data.ticketPrice);
+      })
+      .catch((err) => console.log(err));
+  }, []);
 
-  const handleSeatClick = (seat) => {
-    if (bookedSeats.includes(seats)) {
-      return;
+  const selectSeat = (seat) => {
+    if (seat.status === "BOOKED") return;
+
+    if (selectedSeats.includes(seat.seatNumber)) {
+      setSelectedSeats(
+        selectedSeats.filter((item) => item !== seat.seatNumber)
+      );
+    } else {
+      setSelectedSeats([...selectedSeats, seat.seatNumber]);
     }
-
-    setselectedSeats((currentSeats) => {
-      if (currentSeats.includes(seat)) {
-        return currentSeats.filter(
-          (selectedSeats) => selectedSeats !== seat
-        );
-      }
-
-      return [...currentSeats, seat];
-    });
   };
 
-  const totalAmount = useMemo(() => {
-    return selectedSeats.length * TICKET_PRICE;
-  }, [selectedSeats]);
+  const totalAmount = selectedSeats.length * ticketPrice;
 
-  const handleBooking = () => {
-    if (selectedSeats.length === 0) {
-      alert("please select at least one seat");
-      return;
-    }
+  return (
+    <div className="app">
+      <h1>Select Seats</h1>
 
-    console.log({ selectedSeats, totalAmount });
-  };
+      <p>₹{ticketPrice} per seat</p>
 
-    return (
-    <main className="app">
-      <section className="booking-card">
-        <header className="booking-header">
-          <p className="eyebrow">Seat Lock Engine</p>
-          <h1>Select your seats</h1>
-          <h1>Select your seats</h1>
-          <p className="subtext">Showtime: 7:00 PM · ₹{TICKET_PRICE} per seat</p>
-        </header>
+      <div className="seat-map">
+        {seats.map((seat) => (
+          <button
+            key={seat._id}
+            disabled={seat.status === "BOOKED"}
+            className={
+              selectedSeats.includes(seat.seatNumber)
+                ? "seat selected"
+                : seat.status === "BOOKED"
+                ? "seat booked"
+                : "seat"
+            }
+            onClick={() => selectSeat(seat)}
+          >
+            {seat.seatNumber}
+          </button>
+        ))}
+      </div>
 
-        <div className="screen">SCREEN</div>
-        <div className="seat-map">
-          {seatLayout.map((row, rowIndex) => (
-            <div className="seat-row" key={rowIndex}>
-              <span className="row-label">{row[0][0]}</span>
+      <p>
+        Selected:{" "}
+        {selectedSeats.length
+          ? selectedSeats.join(", ")
+          : "None"}
+      </p>
 
-              {row.map((seat) => {
-                const isBooked = bookedSeats.includes(seat);
-                const isSelected = selectedSeats.includes(seat);
+      <h3>Total: ₹{totalAmount}</h3>
 
-                let className = "seat";
-
-                if (isBooked) {
-                  className += " booked";
-                } else if (isSelected) {
-                  className += " selected";
-                }
-
-                return (
-                  <button
-                    key={seat}
-                    className={className}
-                    disabled={isBooked}
-                    onClick={() =>
-                      handleSeatClick(seat)
-                    }
-                  >
-                    {seat}
-                  </button>
-                );
-              })}
-            </div>
-          ))}
-        </div>
-
-        <div className="legend">
-          <span>
-            <i className="legend-box available" />
-            Available
-          </span>
-
-          <span>
-            <i className="legend-box selected" />
-            Selected
-          </span>
-
-          <span>
-            <i className="legend-box booked" />
-            Booked
-          </span>
-        </div>
-
-        <div className="summary">
-          <div>
-            <span className="summary-label">
-              Selected seats
-            </span>
-
-            <strong>
-              {selectedSeats.length > 0
-                ? selectedSeats.join(", ")
-                : "None"}
-            </strong>
-          </div>
-
-          <div>
-            <span className="summary-label">
-              Total
-            </span>
-
-            <strong>
-              ₹{totalAmount}
-            </strong>
-          </div>
-        </div>
-
-        <button
-          className="book-button"
-          onClick={handleBooking}
-        >
-          Book Seats
-        </button>
-      </section>
-    </main>
+      <button className="book-button">
+        Book Seats
+      </button>
+    </div>
   );
 }
 
+export default App;
