@@ -36,6 +36,33 @@ function App() {
 
   const totalAmount = selectedSeats.length * ticketPrice;
 
+  const handleBooking = async () => {
+  if (selectedSeats.length === 0) {
+    alert("Select at least one seat");
+    return;
+  }
+
+  const response = await fetch(
+    "http://localhost:5000/api/bookings/lock",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        showtimeId: SHOWTIME_ID,
+        userId: "test-user",
+        seats: selectedSeats,
+        totalAmount,
+      }),
+    }
+  );
+
+  const data = await response.json();
+
+  console.log(data);
+};
+
   return (
     <div className="app">
       <h1>Select Seats</h1>
