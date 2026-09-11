@@ -97,9 +97,10 @@ function App() {
 
       <h3>Total: ₹{totalAmount}</h3>
 
-      <button className="book-button">
+      <button className="book-button" onClick={handleBooking}>
         Book Seats
       </button>
+      
     </div>
   );
 }
