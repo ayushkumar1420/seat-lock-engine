@@ -42,6 +42,22 @@ function App() {
     return;
   }
 
+  const lockResponse = await fetch(
+    "http://localhost:5000/api/bookings/lock",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        showtimeId: SHOWTIME_ID,
+        userId: "test-user",
+        seats: selectedSeats,
+        totalAmount,
+      }),
+    }
+  );
+
   const response = await fetch(
     "http://localhost:5000/api/bookings/lock",
     {
