@@ -9,18 +9,16 @@ function App() {
   const [selectedSeats, setSelectedSeats] = useState([]);
 
   useEffect(() => {
-  fetch(`http://localhost:5000/api/showtimes/${SHOWTIME_ID}/seats`)
-    .then((res) => res.json())
-    .then((data) => {
-      console.log(data);
-
-      setSeats(data.seats || []);
-      setTicketPrice(data.ticketPrice || 0);
-    })
-    .catch((error) => {
-      console.log("Error fetching seats:", error);
-    });
-}, []);
+    fetch(`http://localhost:5000/api/showtimes/${SHOWTIME_ID}/seats`)
+      .then((res) => res.json())
+      .then((data) => {
+        setSeats(data.seats || []);
+        setTicketPrice(data.ticketPrice || 0);
+      })
+      .catch((error) => {
+        console.log("Error fetching seats:", error);
+      });
+  }, []);
 
   const selectSeat = (seat) => {
     if (seat.status === "BOOKED") return;
@@ -37,47 +35,61 @@ function App() {
   const totalAmount = selectedSeats.length * ticketPrice;
 
   const handleBooking = async () => {
-  if (selectedSeats.length === 0) {
-    alert("Select at least one seat");
-    return;
-  }
-
-  const lockResponse = await fetch(
-    "http://localhost:5000/api/bookings/lock",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        showtimeId: SHOWTIME_ID,
-        userId: "test-user",
-        seats: selectedSeats,
-        totalAmount,
-      }),
+    if (selectedSeats.length === 0) {
+      alert("Select at least one seat");
+      return;
     }
-  );
 
-  const response = await fetch(
-    "http://localhost:5000/api/bookings/lock",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        showtimeId: SHOWTIME_ID,
-        userId: "test-user",
-        seats: selectedSeats,
-        totalAmount,
-      }),
+    // lock seats
+    const lockResponse = await fetch(
+      "http://localhost:5000/api/bookings/lock",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          showtimeId: SHOWTIME_ID,
+          userId: "test-user",
+          seats: selectedSeats,
+          totalAmount,
+        }),
+      }
+    );
+
+    const booking = await lockResponse.json();
+
+    if (!lockResponse.ok) {
+      alert(booking.message);
+      return;
     }
-  );
 
-  const data = await response.json();
+    console.log("Booking:", booking);
 
-  console.log(data);
-};
+    // create Razorpay order
+    const paymentResponse = await fetch(
+      "http://localhost:5000/api/payments/create-order",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          bookingId: booking.bookingId,
+          userId: "test-user",
+        }),
+      }
+    );
+
+    const payment = await paymentResponse.json();
+
+    if (!paymentResponse.ok) {
+      alert(payment.message);
+      return;
+    }
+
+    console.log("Payment order:", payment);
+  };
 
   return (
     <div className="app">
@@ -113,10 +125,12 @@ function App() {
 
       <h3>Total: ₹{totalAmount}</h3>
 
-      <button className="book-button" onClick={handleBooking}>
+      <button
+        className="book-button"
+        onClick={handleBooking}
+      >
         Book Seats
       </button>
-      
     </div>
   );
 }
