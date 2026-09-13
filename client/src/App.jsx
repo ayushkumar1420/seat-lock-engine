@@ -89,7 +89,34 @@ function App() {
     }
 
     console.log("Payment order:", payment);
+
+    const options = {
+      key: payment.keyId,
+      amount: payment.amount,
+      currency: payment.currency,
+      order_id: payment.orderId,
+      name: "seat lock engine",
+
+      handler: async function (response) {
+        const verifyResponse = await fetch(
+          "http://localhost:5000/api/payments/verify",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+              userId: "test-user",
+            }),
+          }
+        );
+      }
   };
+
+  const razorpay = new window.Razorpay(options);
+  razorpay.open();
+};
 
   return (
     <div className="app">
