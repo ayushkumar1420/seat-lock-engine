@@ -302,4 +302,26 @@ const confirmBooking = async (req, res) => {
     }
 };
 
-module.exports = { lockSeats, confirmBooking }
+const getBookingStatus = async (req, res) => {
+    try {
+        const booking = await Booking.findById(req.params.bookingId);
+        if(!booking) {
+            return res.status(404).json({
+                message: "booking not found",
+            });
+        }
+
+        return res.status(200).json({
+            bookingId: booking._id,
+            status: booking.status,
+            seats: booking.seats,
+        });
+    } catch (error) {
+        console.log("booking status error", error);
+        return res.status(500).json({
+            message: "failed to get booking status",
+        });
+    }
+};
+
+module.exports = { lockSeats, confirmBooking, getBookingStatus, }
