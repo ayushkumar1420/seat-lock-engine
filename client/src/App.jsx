@@ -8,16 +8,23 @@ function App() {
   const [ticketPrice, setTicketPrice] = useState(0);
   const [selectedSeats, setSelectedSeats] = useState([]);
 
+  const fetchSeats = async () => {
+  try {
+    const response = await fetch(
+      `http://localhost:5000/api/showtimes/${SHOWTIME_ID}/seats`
+    );
+
+    const data = await response.json();
+
+    setSeats(data.seats || []);
+    setTicketPrice(data.ticketPrice || 0);
+  } catch (error) {
+    console.log("Error fetching seats:", error);
+  }
+};
+
   useEffect(() => {
-    fetch(`http://localhost:5000/api/showtimes/${SHOWTIME_ID}/seats`)
-      .then((res) => res.json())
-      .then((data) => {
-        setSeats(data.seats || []);
-        setTicketPrice(data.ticketPrice || 0);
-      })
-      .catch((error) => {
-        console.log("Error fetching seats:", error);
-      });
+    fetchSeats();
   }, []);
 
   const selectSeat = (seat) => {
