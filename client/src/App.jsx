@@ -118,6 +118,30 @@ function App() {
             }),
           }
         );
+
+        const verifyData = await verifyResponse.json();
+        if(!verifyResponse.ok){
+          alert(verifyData.message);
+          return;
+
+          //give webhook time to finalize booking
+          setTimeout(async () => {
+            const statusResponse = await fetch(
+              `http://localhost:5000/api/bookings/${booking.bookingId}/status`
+            );
+
+            const statusData = await statusResponse.json();
+            if(statusData.status === "SUCCESS"){
+              setSelectedSeats([]);
+
+              //refresh seats from database
+              await fetchSeats();
+              alert("Booking confirmed");
+            } else {
+              alert(`Booking status: ${statusData.status}`);
+            }
+          }, 2000);
+        }
       }
   };
 
