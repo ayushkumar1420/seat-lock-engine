@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import "./App.css";
 
+const API_URL = import.meta.env.VITE_API_URL;
 const SHOWTIME_ID = "6a91259edcce5321a923104d";
+const USER_ID = "test-user";
 
 function App() {
   const [seats, setSeats] = useState([]);
@@ -12,7 +14,7 @@ function App() {
   const fetchSeats = async () => {
     try {
       const response = await fetch(
-        `http://localhost:5000/api/showtimes/${SHOWTIME_ID}/seats`
+        `${API_URL}/api/showtimes/${SHOWTIME_ID}/seats`
       );
 
       const data = await response.json();
@@ -59,7 +61,7 @@ function App() {
     try {
       // 1. Lock selected seats
       const lockResponse = await fetch(
-        "http://localhost:5000/api/bookings/lock",
+        `${API_URL}/api/bookings/lock`,
         {
           method: "POST",
           headers: {
@@ -118,7 +120,7 @@ function App() {
         handler: async function (response) {
           // 4. Verify payment signature
           const verifyResponse = await fetch(
-            "http://localhost:5000/api/payments/verify",
+            `${API_URL}/api/payments/verify`,
             {
               method: "POST",
               headers: {
@@ -155,7 +157,7 @@ function App() {
           // 5. Give webhook time to finalize booking
           setTimeout(async () => {
             const statusResponse = await fetch(
-              `http://localhost:5000/api/bookings/${booking.bookingId}/status`
+              `${API_URL}/api/bookings/${booking.bookingId}/status`
             );
 
             const statusData =
