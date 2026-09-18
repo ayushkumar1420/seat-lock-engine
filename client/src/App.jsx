@@ -32,7 +32,20 @@ function App() {
     fetchShowtimes();
   }, []);
 
-  
+  //fetch seats
+  const fetchSeats = async (showtimeId) => {
+    try {
+      const response = await fetch(
+        `${API_URL}/api/showtimes/${showtimeId}/seats`
+      );
+      const data = await response.json();
+      setSeats(data.seats || []);
+      setTicketPrice(data.ticketPrice || 0);
+
+    } catch (error) {
+      console.log("Error fetching seats:", error);
+    }
+  };
 }
 
 export default App;
