@@ -46,6 +46,28 @@ function App() {
       console.log("Error fetching seats:", error);
     }
   };
+
+  //now adding fetch seats when showtime changes
+  useEffect(() => {
+    if (selectedShowtime) {
+      fetchSeats(selectedShowtime);
+      setSelectedSeats([]);
+    }
+  }, [selectedShowtime]);
+
+  const selectSeat = (seat) => {
+    if (seat.status === "BOOKED") return;
+    if (selectedSeats.includes(seat.seatNumber)) {
+      setSelectedSeats(
+        selectedSeats.filter((item) => item !== seat.seatNumber));
+    } else {
+      setSelectedSeats([
+        ...selectedSeats,
+        seat.seatNumber,
+      ]);
+    }
+  };
+
 }
 
 export default App;
