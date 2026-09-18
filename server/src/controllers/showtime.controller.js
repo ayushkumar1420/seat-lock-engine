@@ -98,4 +98,19 @@ const getShowtimeSeats = async (req, res) => {
         });
     }
 }
-module.exports = { createShowtime, getShowtimeSeats }
+
+const getShowtimes = async (req, res) => {
+    try {
+        const showtimes = await Showtime.find()
+        .sort({ startTime: 1 });
+
+        return res.status(200).json(showtimes);
+    } catch (error) {
+        console.log("get showtimes error", error);
+        return res.status(500).json({
+            message: "failed to fetch showtimes",
+        });
+    }
+}
+
+module.exports = { createShowtime, getShowtimeSeats, getShowtimes }
