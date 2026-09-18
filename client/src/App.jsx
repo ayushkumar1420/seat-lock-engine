@@ -69,7 +69,7 @@ function App() {
           },
           body: JSON.stringify({
             showtimeId: SHOWTIME_ID,
-            userId: "test-user",
+            userId: USER_ID,
             seats: selectedSeats,
             totalAmount,
           }),
@@ -95,7 +95,7 @@ function App() {
           },
           body: JSON.stringify({
             bookingId: booking.bookingId,
-            userId: "test-user",
+            userId: USER_ID,
           }),
         }
       );
@@ -136,7 +136,7 @@ function App() {
                 razorpay_signature:
                   response.razorpay_signature,
 
-                userId: "test-user",
+                userId: USER_ID,
               }),
             }
           );
