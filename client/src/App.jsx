@@ -68,6 +68,23 @@ function App() {
     }
   };
 
+  const totalAmount = selectedSeats.length * ticketPrice;
+
+  const handleBooking = async () => {
+    if (!selectedShowtime) {
+      alert("select a showtime");
+      return;
+    }
+
+    if(selectedSeats.length === 0){
+      alert("select at least one seat");
+      return
+    }
+
+    
+  }
+
+
 }
 
 export default App;
