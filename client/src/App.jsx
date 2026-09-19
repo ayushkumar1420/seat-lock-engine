@@ -81,7 +81,29 @@ function App() {
       return
     }
 
-    
+    try {
+      //lock seats
+      const lockResponse = await fetch(
+        `${API_URL}/api/bookings/lock`,
+        { method: "POST", headers: { "content-type": "appilcation/json"},
+      body: JSON.stringify({
+        showtimeId: selectedShowtime,
+        userId: USER_ID,
+        seats: selectedSeats,
+        totalAmount,
+      }),
+      }
+      );
+
+      const booking = await lockResponse.json();
+
+      if (!lockResponse.ok) {
+        alert(booking.message);
+        return;
+      }
+
+      console.log("booking", booking);
+    }
   }
 
 
