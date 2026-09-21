@@ -69,7 +69,7 @@ const register = async (req, res) => {
             { expiresIn: "1h" }
         );
 
-        return res.status(200).josn({
+        return res.status(200).json({
             message: "login successful",
             token, 
             user: {
