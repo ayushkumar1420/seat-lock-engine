@@ -7,7 +7,9 @@ const LOCK_DURATION = 10 * 60;
 
 const lockSeats = async (req, res)  => {
     try {
-        const { showtimeId, userId, seats, totalAmount } = req.body;
+        const { showtimeId, seats, totalAmount } = req.body;
+
+        const userId = req.user.userId;
 
         if(!showtimeId || !userId || !Array.isArray(seats) || !seats || seats.length === 0 || totalAmount === undefined ){
             return res.status(400).json({
