@@ -5,11 +5,14 @@ const razorpay = require("../config/razorpay");
 
 const createPaymentOrder = async (req, res) => {
     try {
-        const { bookingId, userId } = req.body
+        const { bookingId } = req.body
+
+        //userid comes from verified JWT
+        const userId = req.user.userId;
 
         if( !bookingId || !userId ) {
             return res.status(400).json({
-                message: "bookingId and userId are required",
+                message: "bookingId is required",
             });
         }
 
@@ -94,16 +97,18 @@ const createPaymentOrder = async (req, res) => {
 
 const verifyPayment = async (req, res) => {
     try {
-        const { razorpay_order_id, razorpay_payment_id, razorpay_signature, userId } = req.body;
+        const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
 
         console.log("PAYMENT VERIFY RECEIVED:", {
             razorpay_order_id,
             razorpay_payment_id,
-            userId,
-            hasSignature: !razorpay_signature,
+            hasSignature: !!razorpay_signature,
         });
 
-        if ( !razorpay_order_id || !razorpay_payment_id || !razorpay_signature || !userId ) {
+        //userid comes from verifies jwt
+        const userId = req.user.userId;
+
+        if ( !razorpay_order_id || !razorpay_payment_id || !razorpay_signature ) {
             return res.status(400).json({
                 message: "payment verification fields are required"
             });
