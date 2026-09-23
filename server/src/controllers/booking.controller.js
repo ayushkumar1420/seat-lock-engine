@@ -2,28 +2,31 @@ const mongoose = require("mongoose");
 const redis = require("../config/redis");
 const Booking = require("../modules/booking/booking.model");
 const Seat = require("../modules/seat/seat.model");
+const Showtime = require("../modules/catalog/showtime.model")
 
 const LOCK_DURATION = 10 * 60;
 
 const lockSeats = async (req, res)  => {
     try {
-        const { showtimeId, seats, totalAmount } = req.body;
+        const { showtimeId, seats } = req.body;
 
+        //userid comes from verified JWT
         const userId = req.user.userId;
 
-        if(!showtimeId || !userId || !Array.isArray(seats) || !seats || seats.length === 0 || totalAmount === undefined ){
+        if(!showtimeId || !userId || !Array.isArray(seats) || seats.length === 0 ){
             return res.status(400).json({
                 message: "all fields are required"
             });
         }
 
-        // const alreadyBooked = await Booking.findOne({
-        //     showtimeId,
-        //     seats: { $in: seats },
-        //     status: "SUCCESS",
-        // });
-        // now the check is removed at this place we use seat collection
+        //get real ticket price form database
+        const showtime = await Showtime.findById(showtimeId);
 
+        if(!showtime) {
+            return res.status(404).json({
+                message: "showtime not found"
+            })
+        }
 
         // Remove duplicate seat numbers from the request
         const uniqueSeats = [...new Set(seats)];
@@ -34,6 +37,8 @@ const lockSeats = async (req, res)  => {
             });
         }
 
+        const totalAmount = showtime.ticketPrice * seats.length;
+
         // Check that all requested seats exist
         const existingSeats = await Seat.find({
             showtimeId,
@@ -42,11 +47,9 @@ const lockSeats = async (req, res)  => {
 
         if (existingSeats.length !== seats.length) {
             return res.status(400).json({
-                message:
-                    "One or more requested seats do not exist for this showtime",
+                message: "One or more requested seats do not exist for this showtime",
             });
         }
-
 
         //permanent booking check krne k liye 
         const bookedSeats = existingSeats.filter(
@@ -60,20 +63,12 @@ const lockSeats = async (req, res)  => {
             });
         }
 
-        // if (alreadyBooked) {
-        //     return res.status(409).json({
-        //         message: "seats are already booked"
-        //     });
-        // }
-
-
         const seatKeys = seats.map(
             (seat) =>  `seats:${showtimeId}:${seat}`
         );
 
-        
         //lua script - ek scripting language hai jo ki use hota h complex running,
-        //atomic operation directly on the server tp reduce network latency and,
+        //atomic operation directly on the server to reduce network latency and,
         //ensure data consistency(typo for redis).
         //atomic operation - ek aisa action that executes as a single, indivisual unit.(it follows "all-or-nothing" rule)
 
@@ -84,6 +79,7 @@ const lockSeats = async (req, res)  => {
         //4. setting expiration on all seats
         //5. return 1
 
+        //atomically check and lock all requested seats
         const lockScript = ` 
         for _, key in ipairs(KEYS) do 
         if redis.call("EXISTS", key) == 1 then
@@ -98,6 +94,7 @@ const lockSeats = async (req, res)  => {
         return 1
         `;
 
+        //only removes locks owned by this user
         const unlockScript = `
         for _, key in ipairs(KEYS) do
         if redis.call("GET", key) == ARGV[1] then
@@ -107,7 +104,7 @@ const lockSeats = async (req, res)  => {
         return 1
         `;
 
-        const result = await redis.eval( lockScript, seatKeys.length, ...seatKeys, userId, LOCK_DURATION);
+        const result = await redis.eval( lockScript, seatKeys.length, ...seatKeys, userId.toString(), LOCK_DURATION);
 
         if (result === 0) {
             return res.status(409).json({
@@ -133,23 +130,24 @@ const lockSeats = async (req, res)  => {
         } catch (error) {
             console.error("mongodb booking creation failed", error);
         
+            //release redis lock if mongodb booking fails
             await redis.eval(
                 unlockScript,
                 seatKeys.length,
                 ...seatKeys,
-                userId
+                userId.toString()
             );
 
             return res.status(500).json({
                 message: "booking creation failed, seat locks released",
             });
         }
-        
 
         return res.status(201).json({
             message: "seats locked",
             bookingId: booking._id,
             seats,
+            totalAmount,
             expiresAt,
         });
 
