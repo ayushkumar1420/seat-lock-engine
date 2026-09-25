@@ -78,4 +78,94 @@ function BookingPage({ token, user, onLogout }) {
 
         alert("payment received, booking confirmation is still pending, please wait");
     };
+
+    const verifyPayment = async (PaymentResponse, bookingId, showtimeId) => {
+        try {
+            const response = await fetch(`${API_URL}/api/payments/verify`, {
+                method: "POST",
+                headers: {
+                    "content-type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                    razorpay_order_id: paymentResponse.razorpay_order_id,
+                    razorpay_payment_id: paymentResponse.razorpay_payment_id,
+                    razorpay_signature: paymentResponse.razorpay_signature,
+                }),
+            });
+
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.message || "payment verification faield");
+            }
+            await checkBookingStatus(bookingId, showtimeId);
+        } catch (error) {
+            console.error(error)
+                alert(error.message);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        const handleBooking = async () => {
+            if (!selectedShowtime || !selectedSeats.length || loading) return;
+            setLoading(true);
+
+            try {
+                const headers = {
+                    "content-type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                };
+
+                const lockResponse = await fetch(`${API_URL}/api/bookings/lock`, {
+                    method: "POST",
+                    headers,
+                    body: JSON.stringify({ showtimes: selectedShowtime, seats: selectedSeats }),
+                });
+
+                const booking = await lockResponse.json();
+                if (!lockResponse.ok) {
+                    throw new Error(booking.message || "Seat locking failed");
+                }
+
+                const paymentResponse = await fetch(`${API_URL}/api/payments/create-order`, {
+                    method: "POST",
+                    headers,
+                    body: JSON.stringify({ bookingId: booking.bookingId }),
+                });
+
+                const payment = await paymentResponse.json();
+                if (!paymentResponse.ok) {
+                    throw new Error(payment.meesage || "payment order failed");
+                }
+                if (!window.Razorpay) {
+                    throw new Error("razorpay failed to laod");
+                }
+
+                const razorpay = new window.Razorpay({
+                    key: payment.keyId,
+                    amount: payment.amount,
+                    currency: payment.currency,
+                    order_id: payment.orderId,
+                    name: "Seat Lock Engine",
+                    handler: (response) => verifyPayment(response, booking.bookingId, selectedShowtime),
+                    model: { ondismiss: () => setLoading(false) },
+                });
+
+                razorpay.on("payment.fialed", () => {
+                    setLoading(false);
+                    alert("payment failed, please try again after the seat lock expires");
+                });
+
+                razorpay.open();
+            } catch (error) {
+                console.error(error);
+                alert(error.message);
+                setLoading(false);
+            };
+        };
+
+        const totalAmount = selectedSeats.length * ticketPrice;
+
+        
 }
