@@ -1,5 +1,6 @@
 import { useState } from "react";
 import AuthPage from "./pages/AuthPage";
+import BookingPage from "./pages/BookingPage";
 import "./App.css";
 
 
@@ -13,7 +14,6 @@ function App() {
     const handleLogin = (token, user) => {
         localStorage.setItem("token", token);
         localStorage.setItem("user", JSON.stringify(user));
-
         setToken(token);
         setUser(user);
     };
@@ -21,7 +21,6 @@ function App() {
     const logout = () => {
         localStorage.removeItem("token");
         localStorage.removeItem("user");
-
         setToken("");
         setUser(null);
     };
@@ -31,13 +30,7 @@ function App() {
     }
 
     return (
-        <div className="app">
-            <p>
-                Logged in as <strong>{user?.name}</strong>
-            </p>
-            <button onClick={logout}>Logout</button>
-            <h1>Booking page coming next</h1>
-        </div>
+        <BookingPage token={token} user={user} onLogout={logout}/>
     );
 }
 

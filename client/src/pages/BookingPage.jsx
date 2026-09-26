@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import SeatMap from "../components/SeatMap";
 import API_URL from "../services/api";
-import App from "../App";
+import App from "../App.jsx";
 
 function BookingPage({ token, user, onLogout }) {
     const [showtimes, setShowtimes] = useState([]);
@@ -79,7 +79,7 @@ function BookingPage({ token, user, onLogout }) {
         alert("payment received, booking confirmation is still pending, please wait");
     };
 
-    const verifyPayment = async (PaymentResponse, bookingId, showtimeId) => {
+        const verifyPayment = async (PaymentResponse, bookingId, showtimeId) => {
         try {
             const response = await fetch(`${API_URL}/api/payments/verify`, {
                 method: "POST",
