@@ -167,5 +167,41 @@ function BookingPage({ token, user, onLogout }) {
 
         const totalAmount = selectedSeats.length * ticketPrice;
 
-        
+        return (
+            <div className="app">
+                <div className="user-info">
+                    <p>Logged in as <strong>{user?.name}</strong></p>
+                    <button onClick={onLogout}>Logout</button>
+                </div>
+                <h1>Select Seats</h1>
+
+                <label htmlFor="showtime">Showtime:</label>
+                <select 
+                   id="showtime"
+                   value={selectedShowtime}
+                   onChange={(e) => setSelectedShowtime(e.target.value)}>
+                    {showtimes.map((showtime) => (
+                        <option key={showtime._id} value={showtime._id}>
+                            {new Date(showtime.startTime).toLocaleString()} - ₹{showtime.ticketPrice}
+                        </option>
+                    ))}
+                   </select>
+
+                   <p>₹{ticketPrice} per seat</p>
+
+                   <SeatMap seats={seats} selectedSeats={selectedSeats} onSelect={selectSeat}></SeatMap>
+
+                   <p>Selected: {selectedSeats.length ? selectedSeats.join(", ") : "None"}</p>
+                   <h3>Total: ₹{totalAmount}</h3>
+
+                   <button
+                        className="book-button"
+                        onClick={handleBooking}
+                        disabled={loading || !selectedSeats.length}>
+                            {loading ? "processing..." : "book seats"}
+                    </button>
+            </div>
+        );
 }
+
+export default BookingPage;
