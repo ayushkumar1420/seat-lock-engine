@@ -189,7 +189,7 @@ function BookingPage({ token, user, onLogout }) {
 
                    <p>₹{ticketPrice} per seat</p>
 
-                   <SeatMap seats={seats} selectedSeats={selectedSeats} onSelect={selectSeat}></SeatMap>
+                   <SeatMap seats={seats} selectedSeats={selectedSeats} onSelect={selectSeat} />
 
                    <p>Selected: {selectedSeats.length ? selectedSeats.join(", ") : "None"}</p>
                    <h3>Total: ₹{totalAmount}</h3>

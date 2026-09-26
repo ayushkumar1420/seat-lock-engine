@@ -1,4 +1,4 @@
-function SeatMap({ seats, selectSeats, onSelect }) {
+function SeatMap({ seats, selectedSeats, onSelect }) {
     return (
         <div className="seat-map">
             {seats.map((seat) => (
@@ -6,7 +6,7 @@ function SeatMap({ seats, selectSeats, onSelect }) {
                 key={seat._id} 
                 disabled={seat.status === "BOOKED"}
                 className={
-                    selectSeats.includes(seat.seatNumber) ? "seat selected" : seat.status === "BOOKED" ? "seat booked" : "seat" }
+                    selectedSeats.includes(seat.seatNumber) ? "seat selected" : seat.status === "BOOKED" ? "seat booked" : "seat" }
                     onClick={() => onSelect(seat)}> {seat.seatNumber} </button>
             ))}
         </div>
