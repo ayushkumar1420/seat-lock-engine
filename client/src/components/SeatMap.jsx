@@ -1,4 +1,5 @@
 function SeatMap({ seats, selectedSeats, onSelect }) {
+console.log("Seat map props", { seats, selectedSeats, onSelect })
     return (
         <div className="seat-map">
             {seats.map((seat) => (
