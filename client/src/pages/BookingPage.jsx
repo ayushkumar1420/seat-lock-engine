@@ -112,11 +112,6 @@ function BookingPage({ token, user, onLogout }) {
             setLoading(true);
 
             try {
-                const headers = {
-                    "content-type": "application/json",
-                    Authorization: `Bearer ${token}`,
-                };
-
                 const lockResponse = await fetch(`${API_URL}/api/bookings/lock`, {
                     method: "POST",
                     headers: {
@@ -130,6 +125,7 @@ function BookingPage({ token, user, onLogout }) {
                 });
 
                 const booking = await lockResponse.json();
+
                 if (!lockResponse.ok) {
                     throw new Error(booking.message || "Seat locking failed");
                 }
@@ -144,11 +140,12 @@ function BookingPage({ token, user, onLogout }) {
                 });
 
                 const payment = await paymentResponse.json();
+
                 if (!paymentResponse.ok) {
-                    throw new Error(payment.meesage || "payment order failed");
+                    throw new Error(payment.message || "Payment order failed");
                 }
                 if (!window.Razorpay) {
-                    throw new Error("razorpay failed to laod");
+                    throw new Error("Razorpay failed to laod");
                 }
 
                 const razorpay = new window.Razorpay({
@@ -158,10 +155,10 @@ function BookingPage({ token, user, onLogout }) {
                     order_id: payment.orderId,
                     name: "Seat Lock Engine",
                     handler: (response) => verifyPayment(response, booking.bookingId, selectedShowtime),
-                    model: { ondismiss: () => setLoading(false) },
+                    modal: { ondismiss: () => setLoading(false) },
                 });
 
-                razorpay.on("payment.fialed", () => {
+                razorpay.on("payment.failed", () => {
                     setLoading(false);
                     alert("payment failed, please try again after the seat lock expires");
                 });
