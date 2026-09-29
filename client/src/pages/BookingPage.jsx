@@ -119,8 +119,14 @@ function BookingPage({ token, user, onLogout }) {
 
                 const lockResponse = await fetch(`${API_URL}/api/bookings/lock`, {
                     method: "POST",
-                    headers,
-                    body: JSON.stringify({ showtimes: selectedShowtime, seats: selectedSeats }),
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({ 
+                        showtimeId: selectedShowtime, 
+                        seats: selectedSeats 
+                    }),
                 });
 
                 const booking = await lockResponse.json();
@@ -166,6 +172,8 @@ function BookingPage({ token, user, onLogout }) {
         };
 
         const totalAmount = selectedSeats.length * ticketPrice;
+
+        console.log("booking page", { seats, selectedSeats });
 
         return (
             <div className="app">
