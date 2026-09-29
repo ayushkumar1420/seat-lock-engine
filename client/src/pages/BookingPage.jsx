@@ -136,7 +136,10 @@ function BookingPage({ token, user, onLogout }) {
 
                 const paymentResponse = await fetch(`${API_URL}/api/payments/create-order`, {
                     method: "POST",
-                    headers,
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`,
+                    },
                     body: JSON.stringify({ bookingId: booking.bookingId }),
                 });
 
