@@ -87,19 +87,21 @@ const getShowtimeSeats = async (req, res) => {
             seat.map((seat) => redis.get(`seats:${showtimeId}:${seat.seatNumber}`))
         );
 
-        
+        const seatsWithStatus = seat.map((seat, index) => ({
+            ...seat,
+            status: seat.status === "BOOKED" ? "BOOKED" : lockValues[index] ? "LOCKED" : "AVAILABLE",
+        }));
+
+
         return res.status(200).json({
             showtimeId: showtime._id,
             startTime: showtime.startTime,
             ticketPrice: showtime.ticketPrice,
-            seats: seatWithStatus,
+            seats: seatsWithStatus,
         });
 
     } catch (error) {
-         console.error(
-            "Get showtime seats error:",
-            error
-        );
+        console.error("Get showtime seats error:",error);
 
         return res.status(500).json({
             message: "Failed to fetch seats",
