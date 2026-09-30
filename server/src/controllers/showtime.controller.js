@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const Showtime = require("../modules/catalog/showtime.model");
 const createSeatInventory = require("../utils/createSeatInventory");
 const Seat = require("../modules/seat/seat.model");
+const redis = require("../config/redis")
 
 const createShowtime = async (req, res) => {
     const session = await mongoose.startSession();
@@ -78,13 +79,20 @@ const getShowtimeSeats = async (req, res) => {
 
         const seats = await Seat.find({showtimeId})
         .select("seatNumber status")
-        .sort({seatNumber: 1});
+        .sort({seatNumber: 1})
+        .lean();
+        
+        //check temporary redis locks for every seat
+        const lockValues = await Promise.all(
+            seat.map((seat) => redis.get(`seats:${showtimeId}:${seat.seatNumber}`))
+        );
 
+        
         return res.status(200).json({
             showtimeId: showtime._id,
             startTime: showtime.startTime,
             ticketPrice: showtime.ticketPrice,
-            seats,
+            seats: seatWithStatus,
         });
 
     } catch (error) {
