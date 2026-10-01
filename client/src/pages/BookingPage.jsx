@@ -40,6 +40,12 @@ function BookingPage({ token, user, onLogout }) {
 
         setSelectedSeats([]);
         fetchSeats(selectedShowtime).catch(console.error);
+
+        const interval = setInterval(() => {
+            fetchSeats(selectedShowtime).catch(console.error);
+        }, 3000);
+
+        return () => clearInterval(interval);
     }, [selectedShowtime]);
 
     const selectSeat = (seat) => {

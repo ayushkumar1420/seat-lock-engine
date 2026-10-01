@@ -84,10 +84,10 @@ const getShowtimeSeats = async (req, res) => {
         
         //check temporary redis locks for every seat
         const lockValues = await Promise.all(
-            seat.map((seat) => redis.get(`seats:${showtimeId}:${seat.seatNumber}`))
+            seats.map((seat) => redis.get(`seats:${showtimeId}:${seat.seatNumber}`))
         );
 
-        const seatsWithStatus = seat.map((seat, index) => ({
+        const seatsWithStatus = seats.map((seat, index) => ({
             ...seat,
             status: seat.status === "BOOKED" ? "BOOKED" : lockValues[index] ? "LOCKED" : "AVAILABLE",
         }));
