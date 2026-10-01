@@ -9,6 +9,8 @@ function BookingPage({ token, user, onLogout }) {
     const [ticketPrice, setTicketPrice] = useState(0);
     const [selectedSeats, setSelectedSeats] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [lockExpiresAt, setLockExpiresAt] = useState(null);
+    const [timeLeft, setTimeLeft] = useState(0);
 
     useEffect(() => {
         const fetchShowtime = async () => {
@@ -55,6 +57,27 @@ function BookingPage({ token, user, onLogout }) {
 
         return () => clearInterval(interval);
     }, [selectedShowtime]);
+
+    useEffect(() => {
+        if(!lockExpiresAt) return;
+
+        const updateTimer = () => {
+            const remaining = Math.max(0, Math.floor((new Date(lockExpiresAt).getTime() - Date.now()) / 1000));
+            setTimeLeft(remaining);
+
+            if(remaining === 0){
+                setLockExpiresAt(null);
+                setLoading(false);
+
+                if(selectedShowtime){
+                    fetchSeats(selectedShowtime).catch(console.error);
+                }
+            }
+        };
+        updateTimer();
+        const timer = setInterval(updateTimer, 1000);
+        return () => clearInterval(timer);
+    }, [lockExpiresAt, selectedShowtime]);
 
     const selectSeat = (seat) => {
         if (seat.status === "BOOKED" || seat.status === "LOCKED") return;
@@ -143,6 +166,8 @@ function BookingPage({ token, user, onLogout }) {
                     throw new Error(booking.message || "Seat locking failed");
                 }
 
+                setLockExpiresAt(booking.expiresAt)
+
                 const paymentResponse = await fetch(`${API_URL}/api/payments/create-order`, {
                     method: "POST",
                     headers: {
@@ -185,6 +210,11 @@ function BookingPage({ token, user, onLogout }) {
         };
 
         const totalAmount = selectedSeats.length * ticketPrice;
+
+        const minutes = Math.floor(timeLeft / 60);
+        const seconds = timeLeft % 60;
+
+        const formattedTime = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 
         console.log("booking page", { seats, selectedSeats });
 
