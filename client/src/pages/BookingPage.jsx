@@ -98,6 +98,8 @@ function BookingPage({ token, user, onLogout }) {
             const data = await response.json();
             
             if (data.status === "SUCCESS"){
+                setLockExpiresAt(null);
+                setTimeLeft(0);
                 setSelectedSeats([]);
                 await fetchSeats(showtimeId);
                 alert("booking confirmed");
@@ -105,6 +107,11 @@ function BookingPage({ token, user, onLogout }) {
             }
 
             if (data.status === "FAILED" || data.status === "EXPIRED") {
+                setLockExpiresAt(null);
+                setTimeLeft(0);
+
+                await fetchSeats(showtimeId);
+                
                 alert(`booking status: ${data.status}`);
                 return;
             }
@@ -244,6 +251,14 @@ function BookingPage({ token, user, onLogout }) {
 
                    <p>Selected: {selectedSeats.length ? selectedSeats.join(", ") : "None"}</p>
                    <h3>Total: ₹{totalAmount}</h3>
+
+                   {lockExpiresAt && timeLeft > 0 && (
+                    <div className="lock-timer">
+                        <p>your seats are temporarily reserved</p>
+                        <strong>{formattedTime}</strong>
+                        <p>complete payment before the time expires</p>
+                    </div>
+                   )}
 
                    <button
                         className="book-button"
