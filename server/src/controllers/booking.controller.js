@@ -4,7 +4,7 @@ const Booking = require("../modules/booking/booking.model");
 const Seat = require("../modules/seat/seat.model");
 const Showtime = require("../modules/catalog/showtime.model")
 
-const LOCK_DURATION =  30;
+const LOCK_DURATION = 10 * 60;
 
 const lockSeats = async (req, res)  => {
     try {

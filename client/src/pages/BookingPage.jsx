@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import SeatMap from "../components/SeatMap";
 import API_URL from "../services/api";
 
@@ -11,6 +11,8 @@ function BookingPage({ token, user, onLogout }) {
     const [loading, setLoading] = useState(false);
     const [lockExpiresAt, setLockExpiresAt] = useState(null);
     const [timeLeft, setTimeLeft] = useState(0);
+    const lockedSeatsRef = useRef([]);
+
 
     useEffect(() => {
         const fetchShowtime = async () => {
@@ -41,7 +43,7 @@ function BookingPage({ token, user, onLogout }) {
         //remove selected seats that are no longer available
         setSelectedSeats((previous) => previous.filter((seatNumber) => {
             const seat = latestSeats.find((item) => item.seatNumber === seatNumber);
-            return seat && seat.status === "AVAILABLE";
+            return seat && seat.status === "AVAILABLE" || lockedSeatsRef.current.includes(seatNumber);
         }));
     };
 
@@ -66,6 +68,7 @@ function BookingPage({ token, user, onLogout }) {
             setTimeLeft(remaining);
 
             if(remaining === 0){
+                lockedSeatsRef.current = [];
                 setLockExpiresAt(null);
                 setLoading(false);
 
@@ -98,6 +101,7 @@ function BookingPage({ token, user, onLogout }) {
             const data = await response.json();
             
             if (data.status === "SUCCESS"){
+                lockedSeatsRef.current = [];
                 setLockExpiresAt(null);
                 setTimeLeft(0);
                 setSelectedSeats([]);
@@ -107,11 +111,12 @@ function BookingPage({ token, user, onLogout }) {
             }
 
             if (data.status === "FAILED" || data.status === "EXPIRED") {
+                lockedSeatsRef.current = [];
                 setLockExpiresAt(null);
                 setTimeLeft(0);
 
                 await fetchSeats(showtimeId);
-                
+
                 alert(`booking status: ${data.status}`);
                 return;
             }
@@ -173,6 +178,7 @@ function BookingPage({ token, user, onLogout }) {
                     throw new Error(booking.message || "Seat locking failed");
                 }
 
+                lockedSeatsRef.current = booking.seats;
                 setLockExpiresAt(booking.expiresAt)
 
                 const paymentResponse = await fetch(`${API_URL}/api/payments/create-order`, {
