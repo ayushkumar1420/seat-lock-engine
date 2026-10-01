@@ -31,8 +31,16 @@ function BookingPage({ token, user, onLogout }) {
         if (!response.ok) throw new Error("failed to fetch seats");
 
         const data = await response.json();
-        setSeats(data.seats || []);
+        const latestSeats = data.seats || [];
+
+        setSeats(latestSeats);
         setTicketPrice(data.ticketPrice || 0);
+
+        //remove selected seats that are no longer available
+        setSelectedSeats((previous) => previous.filter((seatNumber) => {
+            const seat = latestSeats.find((item) => item.seatNumber === seatNumber);
+            return seat && seat.status === "AVAILABLE";
+        }));
     };
 
     useEffect(() => {
@@ -49,7 +57,7 @@ function BookingPage({ token, user, onLogout }) {
     }, [selectedShowtime]);
 
     const selectSeat = (seat) => {
-        if (seat.status === "BOOKED") return;
+        if (seat.status === "BOOKED" || seat.status === "LOCKED") return;
 
         setSelectedSeats((previous) => 
         previous.includes(seat.seatNumber) ? 
