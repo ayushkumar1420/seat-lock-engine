@@ -1,4 +1,3 @@
-const mongoose = require("mongoose");
 const redis = require("../config/redis");
 const Booking = require("../modules/booking/booking.model");
 const Seat = require("../modules/seat/seat.model");
@@ -160,155 +159,13 @@ const lockSeats = async (req, res)  => {
     }
 }
 
-const confirmBooking = async (req, res) => {
-    const session = await mongoose.startSession();
-
-    try {
-        const { bookingId, userId } = req.body;
-
-        if (!bookingId || !userId) {
-            return res.status(400).json({
-                message: "bookingId and userId are required",
-            });
-        }
-
-        // Find pending booking
-        const booking = await Booking.findOne({
-            _id: bookingId,
-            userId,
-            status: "PENDING",
-        });
-
-        if (!booking) {
-            return res.status(404).json({
-                message: "Pending booking not found",
-            });
-        }
-
-        // Check booking expiry
-        if (booking.expiresAt <= new Date()) {
-            booking.status = "EXPIRED";
-            await booking.save();
-
-            return res.status(409).json({
-                message: "Booking has expired",
-            });
-        }
-
-        const seatKeys = booking.seats.map(
-            (seat) => `seats:${booking.showtimeId}:${seat}`
-        );
-
-        // Verify that this user still owns every Redis lock
-        const verifyLocksScript = `
-            for _, key in ipairs(KEYS) do
-                if redis.call("GET", key) ~= ARGV[1] then
-                    return 0
-                end
-            end
-
-            return 1
-        `;
-
-        const ownsLocks = await redis.eval(
-            verifyLocksScript,
-            seatKeys.length,
-            ...seatKeys,
-            userId
-        );
-
-        if (ownsLocks === 0) {
-            return res.status(409).json({
-                message: "Seat lock has expired or is no longer owned by this user",
-            });
-        }
-
-        // Start MongoDB transaction
-        session.startTransaction();
-
-        for (const seatNumber of booking.seats) {
-            const seat = await Seat.findOneAndUpdate(
-                {
-                    showtimeId: booking.showtimeId,
-                    seatNumber,
-                    status: "AVAILABLE",
-                },
-                {
-                    $set: {
-                        status: "BOOKED",
-                        bookingId: booking._id,
-                    },
-                },
-                {
-                    new: true,
-                    session,
-                }
-            );
-
-            if (!seat) {
-                throw new Error(
-                    `Seat ${seatNumber} is already booked or does not exist`
-                );
-            }
-        }
-
-        // Booking becomes successful in the SAME transaction
-        booking.status = "SUCCESS";
-
-        await booking.save({ session });
-
-        await session.commitTransaction();
-
-        // Only after MongoDB commit succeeds,
-        // remove temporary Redis locks
-        const unlockScript = `
-            for _, key in ipairs(KEYS) do
-                if redis.call("GET", key) == ARGV[1] then
-                    redis.call("DEL", key)
-                end
-            end
-
-            return 1
-        `;
-
-        await redis.eval(
-            unlockScript,
-            seatKeys.length,
-            ...seatKeys,
-            userId
-        );
-
-        return res.status(200).json({
-            message: "Booking confirmed successfully",
-            bookingId: booking._id,
-            status: "SUCCESS",
-            seats: booking.seats,
-        });
-
-    } catch (error) {
-
-        if (session.inTransaction()) {
-            await session.abortTransaction();
-        }
-
-        console.error("Booking confirmation error:", error);
-
-        return res.status(409).json({
-            message: error.message || "Failed to confirm booking",
-        });
-
-    } finally {
-        await session.endSession();
-    }
-};
-
 const getBookingStatus = async (req, res) => {
     try {
         const booking = await Booking.findOne({
             _id: req.params.bookingId,
             userId: req.user.userId,
         });
-        
+
         if(!booking) {
             return res.status(404).json({
                 message: "booking not found",
@@ -328,4 +185,4 @@ const getBookingStatus = async (req, res) => {
     }
 };
 
-module.exports = { lockSeats, confirmBooking, getBookingStatus, }
+module.exports = { lockSeats, getBookingStatus, }
