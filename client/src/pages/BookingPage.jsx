@@ -93,7 +93,9 @@ function BookingPage({ token, user, onLogout }) {
     const checkBookingStatus = async (bookingId, showtimeId) => {
         //webhook may takes few seconds to finish
         for ( let attempt = 0; attempt < 5; attempt++) {
-            const response = await fetch(`${API_URL}/api/bookings/${bookingId}/status`);
+            const response = await fetch(`${API_URL}/api/bookings/${bookingId}/status`,{
+                headers: { Authorization: `Bearer ${token}`,}
+            });
             if (!response.ok) {
                 throw new Error("failed to check booking status");
             }

@@ -304,7 +304,11 @@ const confirmBooking = async (req, res) => {
 
 const getBookingStatus = async (req, res) => {
     try {
-        const booking = await Booking.findById(req.params.bookingId);
+        const booking = await Booking.findOne({
+            _id: req.params.bookingId,
+            userId: req.user.userId,
+        });
+        
         if(!booking) {
             return res.status(404).json({
                 message: "booking not found",

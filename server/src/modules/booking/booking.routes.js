@@ -6,6 +6,6 @@ const router = express.Router();
 
 router.post("/lock", authenticate, lockSeats);
 router.post("/confirm", confirmBooking);
-router.get("/:bookingId/status", getBookingStatus);
+router.get("/:bookingId/status", authenticate, getBookingStatus);
 
 module.exports = router;
