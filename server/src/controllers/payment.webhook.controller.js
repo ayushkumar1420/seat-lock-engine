@@ -15,7 +15,6 @@ const razorpayWebhook = async (req, res) => {
 
         console.log("=== WEBHOOK RECEIVED ===");
         console.log("Body Buffer:", Buffer.isBuffer(req.body));
-        console.log("Signature:", signature);
         console.log("Event ID:", eventId);
 
         if (!signature) {
@@ -116,6 +115,30 @@ const razorpayWebhook = async (req, res) => {
             });
         }
 
+        //check krne k liye ki this user still owns all temporary seats lock or not
+        const seatKeys = booking.seats.map((seat) => `seats:${booking.showtimeId}:${seat}`);
+
+        const lockOwners = await Promise.all( seatKeys.map((key) => redis.get(key)));
+
+        const ownsAllLocks = lockOwners.every((owner) => owner === booking.userId.toString());
+
+        if (!ownsAllLocks) {
+            console.warn(`seat lock expired or ownership changed for booking ${booking._id}`);
+
+
+            await Payment.updateOne({ _id: payment._id },{
+                $set: { 
+                    status: "FAILED",
+                    razorpayPaymentId: razorpayPaymentId || payment.razorpayPaymentId || null,
+                    razorpayEventId: eventId || null,
+                },
+            });
+
+            return res.status(200).json({
+                message: "seat lock expired, payment marked for refund",
+            });
+        }
+
         session.startTransaction();
 
         //har seat ko permanently reserve krne k liye
@@ -178,7 +201,7 @@ const razorpayWebhook = async (req, res) => {
         console.log(`Payment ${payment._id} and Booking ${booking._id} committed as SUCCESS`);
 
         //mongodb is now the permanent source of truth, now remove redis temporary locks after commit
-        const seatKeys = booking.seats.map((seat) => `seats:${booking.showtimeId}:${seat}`);
+        //const seatKeys = booking.seats.map((seat) => `seats:${booking.showtimeId}:${seat}`);
 
         const unlockScript = `
         for _, key in ipairs(KEYS) do

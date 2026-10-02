@@ -12,7 +12,7 @@ function BookingPage({ token, user, onLogout }) {
     const [lockExpiresAt, setLockExpiresAt] = useState(null);
     const [timeLeft, setTimeLeft] = useState(0);
     const lockedSeatsRef = useRef([]);
-
+    const razorpayRef = useRef(null);
 
     useEffect(() => {
         const fetchShowtime = async () => {
@@ -68,6 +68,23 @@ function BookingPage({ token, user, onLogout }) {
             setTimeLeft(remaining);
 
             if(remaining === 0){
+                if (razorpayRef.current) {
+    try {
+        razorpayRef.current.close();
+    } catch (error) {
+        console.log("could not close razorpay automatically");
+    }
+
+    razorpayRef.current = null;
+}
+
+// Fallback if Razorpay checkout is still open
+const closeButton = document.querySelector(".razorpay-container .razorpay-close");
+
+if (closeButton) {
+    closeButton.click();
+}
+
                 lockedSeatsRef.current = [];
                 setLockExpiresAt(null);
                 setLoading(false);
@@ -77,6 +94,7 @@ function BookingPage({ token, user, onLogout }) {
                 }
             }
         };
+        
         updateTimer();
         const timer = setInterval(updateTimer, 1000);
         return () => clearInterval(timer);
@@ -216,6 +234,7 @@ function BookingPage({ token, user, onLogout }) {
                     alert("payment failed, please try again after the seat lock expires");
                 });
 
+                razorpayRef.current = razorpay;
                 razorpay.open();
             } catch (error) {
                 console.error(error);
