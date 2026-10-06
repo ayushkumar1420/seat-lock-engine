@@ -152,19 +152,18 @@ const razorpayWebhook = async (req, res) => {
 
         if(result.modifiedCount !== booking.seats.length ){
             console.warn(`Seats conflict: expected ${booking.seats.length} available, modified ${result.modifiedCount}`);
+
+            await session.abortTransaction();
             // If seats were already taken by someone else (e.g. late payment),
             // we cannot book the seats. Mark payment as FAILED / refund needed.
-            await Payment.updateOne({
-                _id: payment._id,
-            }, {
+            await Payment.updateOne(
+                { _id: payment._id }, {
                 $set: {
                     status: "FAILED",
                     razorpayPaymentId: razorpayPaymentId || payment.razorpayPaymentId || null,
                     razorpayEventId: eventId || null,
                 }
-            }, { session });
-
-            await session.commitTransaction();
+            });
 
             console.warn(`[PAYMENT CONFLICT]: Marked payment ${payment._id} as FAILED for refund.`);
             return res.status(200).json({

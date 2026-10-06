@@ -1,7 +1,9 @@
 const redis = require("../config/redis");
 const Booking = require("../modules/booking/booking.model");
 const Seat = require("../modules/seat/seat.model");
-const Showtime = require("../modules/catalog/showtime.model")
+const Showtime = require("../modules/catalog/showtime.model");
+const mongoose = require("mongoose");
+
 
 const LOCK_DURATION = 10 * 60;
 
@@ -11,6 +13,7 @@ const lockSeats = async (req, res)  => {
 
         //userid comes from verified JWT
         const userId = req.user.userId;
+        const bookingId = new mongoose.Types.ObjectId();
 
         if(!showtimeId || !userId || !Array.isArray(seats) || seats.length === 0 ){
             return res.status(400).json({
@@ -103,7 +106,7 @@ const lockSeats = async (req, res)  => {
         return 1
         `;
 
-        const result = await redis.eval( lockScript, seatKeys.length, ...seatKeys, userId.toString(), LOCK_DURATION);
+        const result = await redis.eval( lockScript, seatKeys.length, ...seatKeys, bookingId.toString(), LOCK_DURATION);
 
         if (result === 0) {
             return res.status(409).json({
@@ -116,8 +119,8 @@ const lockSeats = async (req, res)  => {
         // to create a pending bookings using trycatch
         let booking;
         try {
-
             booking = await Booking.create({
+                _id: bookingId,
                 showtimeId,
                 userId,
                 seats,
@@ -134,7 +137,7 @@ const lockSeats = async (req, res)  => {
                 unlockScript,
                 seatKeys.length,
                 ...seatKeys,
-                userId.toString()
+                bookingId.toString()
             );
 
             return res.status(500).json({
