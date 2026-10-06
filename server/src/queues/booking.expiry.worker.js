@@ -31,7 +31,7 @@ const checkExpiredBookings = async () => {
                 (seat) => `seats:${booking.showtimeId}:${seat}`
             );
 
-            //if the booking user exists then it only delete redis locks which belongs to that
+            // Delete only the Redis locks owned by this exact booking
             const unlockScript = `
             for _, key in ipairs(KEYS) do
             if redis.call("GET", key) == ARGV[1] then
@@ -45,7 +45,7 @@ const checkExpiredBookings = async () => {
                     unlockScript,
                     seatKeys.length,
                     ...seatKeys,
-                    booking.userId
+                    booking._id.toString()
                 );
             } catch (redisErr) {
                 console.warn("Worker failed to release redis keys:", redisErr.message);

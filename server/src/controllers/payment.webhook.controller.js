@@ -120,7 +120,7 @@ const razorpayWebhook = async (req, res) => {
 
         const lockOwners = await Promise.all( seatKeys.map((key) => redis.get(key)));
 
-        const ownsAllLocks = lockOwners.every((owner) => owner === booking.userId.toString());
+        const ownsAllLocks = lockOwners.every((owner) => owner === booking._id.toString());
 
         if (!ownsAllLocks) {
             console.warn(`seat lock expired or ownership changed for booking ${booking._id}`);
@@ -211,7 +211,7 @@ const razorpayWebhook = async (req, res) => {
         return 1`;
 
         try {
-            await redis.eval(unlockScript, seatKeys.length, ...seatKeys, booking.userId);
+            await redis.eval(unlockScript, seatKeys.length, ...seatKeys, booking._id.toString());
             console.log("Redis seat locks released successfully");
         } catch (redisErr) {
             console.warn("Failed to release redis locks after commit:", redisErr.message);
