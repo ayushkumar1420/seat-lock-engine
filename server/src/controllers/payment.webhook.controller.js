@@ -167,14 +167,26 @@ const razorpayWebhook = async (req, res) => {
             await session.abortTransaction();
             // If seats were already taken by someone else (e.g. late payment),
             // we cannot book the seats. Mark payment as FAILED / refund needed.
-            await Payment.updateOne(
-                { _id: payment._id }, {
+            const failedPayment = await Payment.updateOne(
+                { _id: payment._id, status: "CREATED" }, {
                 $set: {
                     status: "FAILED",
                     razorpayPaymentId: razorpayPaymentId || payment.razorpayPaymentId || null,
                     razorpayEventId: eventId || null,
                 }
             });
+
+            if(failedPayment.modifiedCount === 0) {
+                const latestPayment = await Payment.findById(payment._id);
+                
+                if(latestPayment?.status === "SUCCESS"){
+                    console.log(`Payment ${payment._id} was already finalized by another webhook`);
+                    
+                    return res.status(200).json({
+                        message: "payment already finalized",
+                    });
+                }
+            }
 
             console.warn(`[PAYMENT CONFLICT]: Marked payment ${payment._id} as FAILED for refund.`);
             return res.status(200).json({
