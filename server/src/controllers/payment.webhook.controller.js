@@ -6,6 +6,7 @@ const Payment = require("../modules/payment/payment.model")
 const Booking = require("../modules/booking/booking.model")
 const Seat = require("../modules/seat/seat.model")
 
+
 const razorpayWebhook = async (req, res) => {
     const session = await mongoose.startSession();
 
@@ -196,17 +197,18 @@ const razorpayWebhook = async (req, res) => {
 
         const bookingResult = await Booking.updateOne({
             _id: booking._id,
+            status: "PENDING",
         }, {
             $set: { status: "SUCCESS" },
         }, { session });
 
-        if (bookingResult.modifiedCount !== 1 && booking.status !== "SUCCESS"){
+        if (bookingResult.modifiedCount !== 1){
             throw new Error("booking could not be finalized");
         }
 
         const paymentResult = await Payment.updateOne({
             _id: payment._id,
-            status: { $ne: "SUCCESS" },
+            status: "CREATED",
         }, {
             $set: { 
                 status: "SUCCESS", 
@@ -215,7 +217,7 @@ const razorpayWebhook = async (req, res) => {
             }
         }, { session });
 
-        if(paymentResult.modifiedCount !== 1 && payment.status !== "SUCCESS") {
+        if(paymentResult.modifiedCount !== 1) {
             throw new Error("payment could not be finalized");
         }
 
