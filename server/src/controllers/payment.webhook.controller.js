@@ -125,14 +125,25 @@ const razorpayWebhook = async (req, res) => {
         if (!ownsAllLocks) {
             console.warn(`seat lock expired or ownership changed for booking ${booking._id}`);
 
-
-            await Payment.updateOne({ _id: payment._id },{
+            const failedPayment = await Payment.updateOne({ _id: payment._id, status: "CREATED" },{
                 $set: { 
                     status: "FAILED",
                     razorpayPaymentId: razorpayPaymentId || payment.razorpayPaymentId || null,
                     razorpayEventId: eventId || null,
                 },
             });
+
+            if (failedPayment.modifiedCount === 0) {
+                const latestPayment = await Payment.findById(payment._id);
+
+                if (latestPayment?.status === "SUCCESS"){
+                    console.log(`Payment ${payment._id} was already finalized by another webhook`);
+                    
+                    return res.status(200).json({
+                        message: "payment already finalized",
+                    });
+                }
+            }
 
             return res.status(200).json({
                 message: "seat lock expired, payment marked for refund",
