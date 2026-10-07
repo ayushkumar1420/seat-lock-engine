@@ -17,14 +17,17 @@ function BookingPage({ token, user, onLogout }) {
             return [];
         }
     });
-    const [recoveryBookingId, setRecoveryBookingId] = useState(() => pendingBookings.find((booking) =>
-        booking.status === "PENDING" && new Date(booking.expiresAt).getTime() > Date.now()
-    )?.bookingId || null);
+
+    const getActiveBooking = (bookings) => [...bookings]
+    .reverse()
+    .find((booking) => booking.status === "PENDING" &&
+        new Date(booking.expiresAt).getTime() > Date.now());
+
+    const activeStoredBooking = getActiveBooking(pendingBookings);
+    const [recoveryBookingId, setRecoveryBookingId] = useState(activeStoredBooking?.bookingId || null);
     const [paymentMessage, setPaymentMessage] = useState(() => pendingBookings.length ? "Restoring booking status..." : "");
     const [showtimes, setShowtimes] = useState([]);
-    const [selectedShowtime, setSelectedShowtime] = useState(() =>
-        pendingBookings.find((booking) => new Date(booking.expiresAt).getTime() > Date.now())?.showtimeId || ""
-    );
+    const [selectedShowtime, setSelectedShowtime] = useState(activeStoredBooking?.showtimeId || "");
     const [seats, setSeats] = useState([]);
     const [ticketPrice, setTicketPrice] = useState(0);
     const [selectedSeats, setSelectedSeats] = useState([]);
@@ -202,7 +205,7 @@ if (closeButton) {
                     messages.push(label + (data.status === "EXPIRED" || new Date(data.expiresAt).getTime() <= Date.now()
                         ? "seat reservation expired. Payment outcome is still being checked; expiry does not confirm payment failure."
                         : "payment/booking confirmation pending."));
-                    if (data.status === "PENDING" && new Date(data.expiresAt).getTime() > Date.now()) {
+                    if (bookingId === recoveryBookingId && data.status === "PENDING" && new Date(data.expiresAt).getTime() > Date.now()) {
                         activeBooking = data;
                     }
                 }
