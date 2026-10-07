@@ -19,7 +19,7 @@ const checkExpiredBookings = async () => {
             const updatedBooking = await Booking.findOneAndUpdate(
                 { _id: booking._id, status: "PENDING", expiresAt: { $lte: now } },
                 { $set: { status: "EXPIRED" } },
-                { new: true }
+                { returnDocument: "after" }
             );
 
             if (!updatedBooking) {

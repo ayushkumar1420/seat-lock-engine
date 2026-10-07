@@ -1,5 +1,6 @@
 const redis = require("../config/redis");
 const Booking = require("../modules/booking/booking.model");
+const Payment = require("../modules/payment/payment.model");
 const Seat = require("../modules/seat/seat.model");
 const Showtime = require("../modules/catalog/showtime.model");
 const mongoose = require("mongoose");
@@ -9,17 +10,32 @@ const LOCK_DURATION = 10 * 60;
 
 const lockSeats = async (req, res)  => {
     try {
-        const { showtimeId, seats } = req.body;
+        const { showtimeId: requestedShowtimeId, seats } = req.body || {};
 
         //userid comes from verified JWT
         const userId = req.user.userId;
         const bookingId = new mongoose.Types.ObjectId();
 
-        if(!showtimeId || !userId || !Array.isArray(seats) || seats.length === 0 ){
+        if(typeof requestedShowtimeId !== "string" || !mongoose.isObjectIdOrHexString(requestedShowtimeId)){
             return res.status(400).json({
-                message: "all fields are required"
+                message: "a valid showtimeId is required"
             });
         }
+
+        if(!userId || !Array.isArray(seats) || seats.length === 0 ||
+            seats.some((seat) => typeof seat !== "string" || seat.trim().length === 0)){
+            return res.status(400).json({
+                message: "seats must be a non-empty array of seat numbers"
+            });
+        }
+
+        if (new Set(seats).size !== seats.length) {
+            return res.status(400).json({
+                message: "Duplicate seats are not allowed",
+            });
+        }
+
+        const showtimeId = new mongoose.Types.ObjectId(requestedShowtimeId).toString();
 
         //get real ticket price form database
         const showtime = await Showtime.findById(showtimeId);
@@ -30,12 +46,9 @@ const lockSeats = async (req, res)  => {
             })
         }
 
-        // Remove duplicate seat numbers from the request
-        const uniqueSeats = [...new Set(seats)];
-
-        if (uniqueSeats.length !== seats.length) {
-            return res.status(400).json({
-                message: "Duplicate seats are not allowed",
+        if (!showtime.startTime || showtime.startTime <= new Date()) {
+            return res.status(409).json({
+                message: "showtime has already started",
             });
         }
 
@@ -96,7 +109,7 @@ const lockSeats = async (req, res)  => {
         return 1
         `;
 
-        //only removes locks owned by this user
+        //only removes locks owned by this booking
         const unlockScript = `
         for _, key in ipairs(KEYS) do
         if redis.call("GET", key) == ARGV[1] then
@@ -164,8 +177,22 @@ const lockSeats = async (req, res)  => {
 
 const getBookingStatus = async (req, res) => {
     try {
+        const { bookingId } = req.params;
+
+        if (!mongoose.isObjectIdOrHexString(bookingId)) {
+            return res.status(400).json({
+                message: "a valid bookingId is required",
+            });
+        }
+
+        // Read booking last so a concurrent finalization cannot hide its SUCCESS state.
+        const payment = await Payment.findOne({
+            bookingId,
+            userId: req.user.userId,
+        }).sort({ createdAt: -1 }).select("status");
+
         const booking = await Booking.findOne({
-            _id: req.params.bookingId,
+            _id: bookingId,
             userId: req.user.userId,
         });
 
@@ -179,6 +206,9 @@ const getBookingStatus = async (req, res) => {
             bookingId: booking._id,
             status: booking.status,
             seats: booking.seats,
+            showtimeId: booking.showtimeId,
+            expiresAt: booking.expiresAt,
+            paymentStatus: payment?.status || null,
         });
     } catch (error) {
         console.log("booking status error", error);

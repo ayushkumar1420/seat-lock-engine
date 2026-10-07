@@ -23,6 +23,11 @@ const bookingSchema = new mongoose.Schema({
         required: true
     },
 
+    paymentOrderPending: {
+        type: Boolean,
+        default: false
+    },
+
     status: {
         type: String,
         enum: ['PENDING', 'EXPIRED','FAILED','SUCCESS'],
@@ -37,5 +42,7 @@ const bookingSchema = new mongoose.Schema({
 {
     timestamps: true
 });
+
+bookingSchema.index({ status: 1, expiresAt: 1 });
 
 module.exports = mongoose.model('Booking', bookingSchema);

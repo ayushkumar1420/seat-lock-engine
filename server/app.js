@@ -21,4 +21,17 @@ app.use("/api/bookings", bookingRoutes);
 app.use("/api/showtimes", showtimeRoutes);
 app.use("/api/payments", paymentRoutes);
 
+app.use((error, req, res, next) => {
+    if (res.headersSent) return next(error);
+    console.error("request processing error", error);
+
+    if (error.type === "entity.parse.failed") {
+        return res.status(400).json({ message: "invalid JSON request body" });
+    }
+    if (error.type === "entity.too.large") {
+        return res.status(413).json({ message: "request body is too large" });
+    }
+    return res.status(500).json({ message: "internal server error" });
+});
+
 module.exports = app;

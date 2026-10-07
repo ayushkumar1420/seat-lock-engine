@@ -26,7 +26,7 @@ const paymentSchema = new mongoose.Schema(
 
         status: {
             type: String,
-            enum: [ "CREATED", "SUCCESS", "FAILED", "REFUNDED"],
+            enum: [ "CREATED", "SUCCESS", "FAILED","REFUND_REQUIRED", "REFUNDED"],
             default: "CREATED",
         },
 
@@ -56,6 +56,11 @@ const paymentSchema = new mongoose.Schema(
     {
         timestamps: true,
     }
+);
+
+paymentSchema.index(
+    { bookingId: 1, status: 1 },
+    { unique: true, partialFilterExpression: { status: "CREATED" } }
 );
 
 module.exports = mongoose.model("Payment", paymentSchema);

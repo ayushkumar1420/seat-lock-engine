@@ -3,8 +3,28 @@ import SeatMap from "../components/SeatMap";
 import API_URL from "../services/api";
 
 function BookingPage({ token, user, onLogout }) {
+    const storageKey = user?.id ? `pendingBookings:${user.id}` : null;
+    const [pendingBookings, setPendingBookings] = useState(() => {
+        if (!storageKey) return [];
+        try {
+            const saved = JSON.parse(localStorage.getItem(storageKey) || "[]");
+            return Array.isArray(saved) ? saved.filter((booking) =>
+                /^[a-f\d]{24}$/i.test(booking?.bookingId) &&
+                /^[a-f\d]{24}$/i.test(booking?.showtimeId)
+            ) : [];
+        } catch (error) {
+            console.error("could not restore pending bookings", error);
+            return [];
+        }
+    });
+    const [recoveryBookingId, setRecoveryBookingId] = useState(() => pendingBookings.find((booking) =>
+        booking.status === "PENDING" && new Date(booking.expiresAt).getTime() > Date.now()
+    )?.bookingId || null);
+    const [paymentMessage, setPaymentMessage] = useState(() => pendingBookings.length ? "Restoring booking status..." : "");
     const [showtimes, setShowtimes] = useState([]);
-    const [selectedShowtime, setSelectedShowtime] = useState("");
+    const [selectedShowtime, setSelectedShowtime] = useState(() =>
+        pendingBookings.find((booking) => new Date(booking.expiresAt).getTime() > Date.now())?.showtimeId || ""
+    );
     const [seats, setSeats] = useState([]);
     const [ticketPrice, setTicketPrice] = useState(0);
     const [selectedSeats, setSelectedSeats] = useState([]);
@@ -12,7 +32,22 @@ function BookingPage({ token, user, onLogout }) {
     const [lockExpiresAt, setLockExpiresAt] = useState(null);
     const [timeLeft, setTimeLeft] = useState(0);
     const lockedSeatsRef = useRef([]);
+    const lockedBookingRef = useRef(null);
     const razorpayRef = useRef(null);
+    const pendingBookingIds = pendingBookings.map((booking) => booking.bookingId).join(",");
+
+    useEffect(() => {
+        if (!storageKey) return;
+        try {
+            if (pendingBookings.length) {
+                localStorage.setItem(storageKey, JSON.stringify(pendingBookings));
+            } else {
+                localStorage.removeItem(storageKey);
+            }
+        } catch (error) {
+            console.error("could not save pending bookings", error);
+        }
+    }, [pendingBookings, storageKey]);
 
     useEffect(() => {
         const fetchShowtime = async () => {
@@ -22,7 +57,7 @@ function BookingPage({ token, user, onLogout }) {
 
                 const data = await response.json();
                 setShowtimes(data);
-                if(data.length) setSelectedShowtime(data[0]._id);
+                if(data.length) setSelectedShowtime((previous) => previous || data[0]._id);
             } catch (error) {
                 console.error(error);
             }
@@ -50,14 +85,18 @@ function BookingPage({ token, user, onLogout }) {
     useEffect(() => {
         if (!selectedShowtime) return;
 
-        setSelectedSeats([]);
-        fetchSeats(selectedShowtime).catch(console.error);
+        const initialFetch = setTimeout(() => {
+            fetchSeats(selectedShowtime).catch(console.error);
+        }, 0);
 
         const interval = setInterval(() => {
             fetchSeats(selectedShowtime).catch(console.error);
         }, 3000);
 
-        return () => clearInterval(interval);
+        return () => {
+            clearTimeout(initialFetch);
+            clearInterval(interval);
+        };
     }, [selectedShowtime]);
 
     useEffect(() => {
@@ -71,7 +110,7 @@ function BookingPage({ token, user, onLogout }) {
                 if (razorpayRef.current) {
     try {
         razorpayRef.current.close();
-    } catch (error) {
+    } catch {
         console.log("could not close razorpay automatically");
     }
 
@@ -86,6 +125,7 @@ if (closeButton) {
 }
 
                 lockedSeatsRef.current = [];
+                lockedBookingRef.current = null;
                 setLockExpiresAt(null);
                 setLoading(false);
 
@@ -101,6 +141,7 @@ if (closeButton) {
     }, [lockExpiresAt, selectedShowtime]);
 
     const selectSeat = (seat) => {
+        if (loading || recoveryBookingId || lockExpiresAt) return;
         if (seat.status === "BOOKED" || seat.status === "LOCKED") return;
 
         setSelectedSeats((previous) => 
@@ -108,46 +149,97 @@ if (closeButton) {
         previous.filter((item) => item !== seat.seatNumber) : [...previous, seat.seatNumber])
     };
 
-    const checkBookingStatus = async (bookingId, showtimeId) => {
-        //webhook may takes few seconds to finish
-        for ( let attempt = 0; attempt < 5; attempt++) {
-            const response = await fetch(`${API_URL}/api/bookings/${bookingId}/status`,{
-                headers: { Authorization: `Bearer ${token}`,}
-            });
-            if (!response.ok) {
-                throw new Error("failed to check booking status");
+    useEffect(() => {
+        if (!pendingBookingIds) return;
+
+        let cancelled = false;
+        let timer;
+        const controller = new AbortController();
+        const poll = async () => {
+            const updates = await Promise.all(pendingBookingIds.split(",").map(async (bookingId) => {
+                try {
+                    const response = await fetch(`${API_URL}/api/bookings/${bookingId}/status`, {
+                        headers: { Authorization: `Bearer ${token}` },
+                        signal: controller.signal,
+                    });
+                    if (!response.ok) throw new Error("booking status temporarily unavailable");
+                    return { bookingId, data: await response.json() };
+                } catch (error) {
+                    return { bookingId, error };
+                }
+            }));
+            if (cancelled) return;
+            if (updates.some((update) => update.bookingId === recoveryBookingId && update.data)) {
+                setRecoveryBookingId(null);
             }
 
-            const data = await response.json();
-            
-            if (data.status === "SUCCESS"){
+            const finished = new Set();
+            const messages = [];
+            const confirmations = [];
+            let activeBooking;
+            for (const { bookingId, data, error } of updates) {
+                const label = `Booking ${bookingId}: `;
+                if (error) {
+                    messages.push(`${label}status unavailable. We will keep checking; payment outcome is not yet confirmed.`);
+                    continue;
+                }
+
+                let finalMessage;
+                if (data.status === "SUCCESS") {
+                    finalMessage = "booking confirmed.";
+                } else if (data.paymentStatus === "REFUND_REQUIRED") {
+                    finalMessage = "money was captured, but the booking could not be fulfilled. Refund/reconciliation is required; a refund is not yet confirmed.";
+                } else if (data.paymentStatus === "REFUNDED") {
+                    finalMessage = "payment refunded.";
+                } else if (data.paymentStatus === "FAILED") {
+                    finalMessage = "payment attempt was marked failed by the server.";
+                }
+
+                if (finalMessage) {
+                    finished.add(bookingId);
+                    confirmations.push(label + finalMessage);
+                } else {
+                    messages.push(label + (data.status === "EXPIRED" || new Date(data.expiresAt).getTime() <= Date.now()
+                        ? "seat reservation expired. Payment outcome is still being checked; expiry does not confirm payment failure."
+                        : "payment/booking confirmation pending."));
+                    if (data.status === "PENDING" && new Date(data.expiresAt).getTime() > Date.now()) {
+                        activeBooking = data;
+                    }
+                }
+            }
+
+            setPendingBookings((previous) => previous.filter((booking) => !finished.has(booking.bookingId)).map((booking) => {
+                const data = updates.find((update) => update.bookingId === booking.bookingId)?.data;
+                return data ? { bookingId: data.bookingId, showtimeId: data.showtimeId, seats: data.seats, expiresAt: data.expiresAt, status: data.status } : booking;
+            }));
+            setPaymentMessage([...confirmations, ...messages].join(" "));
+            if (activeBooking) {
+                lockedSeatsRef.current = activeBooking.seats;
+                lockedBookingRef.current = activeBooking.bookingId;
+                setSelectedShowtime(activeBooking.showtimeId);
+                setSelectedSeats(activeBooking.seats);
+                setLockExpiresAt(activeBooking.expiresAt);
+            } else if (finished.has(lockedBookingRef.current)) {
                 lockedSeatsRef.current = [];
+                lockedBookingRef.current = null;
                 setLockExpiresAt(null);
                 setTimeLeft(0);
                 setSelectedSeats([]);
-                await fetchSeats(showtimeId);
-                alert("booking confirmed");
-                return;
+                setLoading(false);
             }
+            if (confirmations.length) alert(confirmations.join("\n\n"));
+            timer = setTimeout(poll, 5000);
+        };
 
-            if (data.status === "FAILED" || data.status === "EXPIRED") {
-                lockedSeatsRef.current = [];
-                setLockExpiresAt(null);
-                setTimeLeft(0);
+        poll();
+        return () => {
+            cancelled = true;
+            controller.abort();
+            clearTimeout(timer);
+        };
+    }, [pendingBookingIds, token, recoveryBookingId]);
 
-                await fetchSeats(showtimeId);
-
-                alert(`booking status: ${data.status}`);
-                return;
-            }
-
-            await new Promise((resolve) => setTimeout(resolve, 2000));
-        }
-
-        alert("payment received, booking confirmation is still pending, please wait");
-    };
-
-        const verifyPayment = async (paymentResponse, bookingId, showtimeId) => {
+        const verifyPayment = async (paymentResponse, checkout) => {
         try {
             const response = await fetch(`${API_URL}/api/payments/verify`, {
                 method: "POST",
@@ -164,22 +256,29 @@ if (closeButton) {
 
             const data = await response.json();
             if (!response.ok) {
-                throw new Error(data.message || "payment verification faield");
+                throw new Error(data.message || "payment verification unavailable");
             }
-            await checkBookingStatus(bookingId, showtimeId);
         } catch (error) {
-            console.error(error)
-                alert(error.message);
+                // A failed browser verification request cannot establish the payment outcome.
+                // Persisted bookings continue polling the authoritative webhook result.
+                console.error(error);
             } finally {
-                setLoading(false);
+                if (razorpayRef.current === checkout) {
+                    razorpayRef.current = null;
+                    setLoading(false);
+                }
             }
         };
 
         const handleBooking = async () => {
-            if (!selectedShowtime || !selectedSeats.length || loading) return;
+            if (!storageKey || !selectedShowtime || !selectedSeats.length || loading || recoveryBookingId) return;
             setLoading(true);
+            let booking;
 
             try {
+                booking = pendingBookings.find((item) => item.showtimeId === selectedShowtime &&
+                    item.status === "PENDING" && new Date(item.expiresAt).getTime() > Date.now());
+                if (!booking) {
                 const lockResponse = await fetch(`${API_URL}/api/bookings/lock`, {
                     method: "POST",
                     headers: {
@@ -192,14 +291,26 @@ if (closeButton) {
                     }),
                 });
 
-                const booking = await lockResponse.json();
+                const lockedBooking = await lockResponse.json();
 
                 if (!lockResponse.ok) {
-                    throw new Error(booking.message || "Seat locking failed");
+                    throw new Error(lockedBooking.message || "Seat locking failed");
+                }
+                booking = { ...lockedBooking, showtimeId: selectedShowtime, status: "PENDING" };
+                setPendingBookings((previous) => [...previous, booking]);
                 }
 
                 lockedSeatsRef.current = booking.seats;
+                lockedBookingRef.current = booking.bookingId;
                 setLockExpiresAt(booking.expiresAt)
+                // Persist before requesting/opening checkout so an immediate reload can recover it.
+                try {
+                    const savedBookings = pendingBookings.some((item) => item.bookingId === booking.bookingId)
+                        ? pendingBookings : [...pendingBookings, booking];
+                    localStorage.setItem(storageKey, JSON.stringify(savedBookings));
+                } catch {
+                    throw new Error("Could not save booking recovery in this browser. Payment checkout was not opened. Enable browser storage and retry.");
+                }
 
                 const paymentResponse = await fetch(`${API_URL}/api/payments/create-order`, {
                     method: "POST",
@@ -215,6 +326,9 @@ if (closeButton) {
                 if (!paymentResponse.ok) {
                     throw new Error(payment.message || "Payment order failed");
                 }
+                if (lockedBookingRef.current !== booking.bookingId || new Date(booking.expiresAt).getTime() <= Date.now()) {
+                    throw new Error("Seat reservation is no longer active. Booking status will continue to be checked.");
+                }
                 if (!window.Razorpay) {
                     throw new Error("Razorpay failed to laod");
                 }
@@ -225,13 +339,19 @@ if (closeButton) {
                     currency: payment.currency,
                     order_id: payment.orderId,
                     name: "Seat Lock Engine",
-                    handler: (response) => verifyPayment(response, booking.bookingId, selectedShowtime),
-                    modal: { ondismiss: () => setLoading(false) },
+                    handler: (response) => verifyPayment(response, razorpay),
+                    modal: { ondismiss: () => {
+                        if (razorpayRef.current === razorpay) {
+                            razorpayRef.current = null;
+                            setLoading(false);
+                        }
+                    } },
                 });
 
                 razorpay.on("payment.failed", () => {
+                    if (razorpayRef.current !== razorpay) return;
                     setLoading(false);
-                    alert("payment failed, please try again after the seat lock expires");
+                    alert("Checkout reported a failed attempt. Payment and booking status are still being checked.");
                 });
 
                 razorpayRef.current = razorpay;
@@ -239,7 +359,7 @@ if (closeButton) {
             } catch (error) {
                 console.error(error);
                 alert(error.message);
-                setLoading(false);
+                if (!booking || lockedBookingRef.current === booking.bookingId) setLoading(false);
             };
         };
 
@@ -264,7 +384,14 @@ if (closeButton) {
                 <select 
                    id="showtime"
                    value={selectedShowtime}
-                   onChange={(e) => setSelectedShowtime(e.target.value)}>
+                   disabled={loading || Boolean(recoveryBookingId) || Boolean(lockExpiresAt)}
+                   onChange={(e) => {
+                       setSelectedSeats([]);
+                       setSelectedShowtime(e.target.value);
+                   }}>
+                    {selectedShowtime && !showtimes.some((showtime) => showtime._id === selectedShowtime) && (
+                        <option value={selectedShowtime}>Pending booking showtime</option>
+                    )}
                     {showtimes.map((showtime) => (
                         <option key={showtime._id} value={showtime._id}>
                             {new Date(showtime.startTime).toLocaleString()} - ₹{showtime.ticketPrice}
@@ -279,6 +406,8 @@ if (closeButton) {
                    <p>Selected: {selectedSeats.length ? selectedSeats.join(", ") : "None"}</p>
                    <h3>Total: ₹{totalAmount}</h3>
 
+                   {paymentMessage && <p role="status">{paymentMessage}</p>}
+
                    {lockExpiresAt && timeLeft > 0 && (
                     <div className="lock-timer">
                         <p>your seats are temporarily reserved</p>
@@ -290,8 +419,8 @@ if (closeButton) {
                    <button
                         className="book-button"
                         onClick={handleBooking}
-                        disabled={loading || !selectedSeats.length}>
-                            {loading ? "processing..." : "book seats"}
+                        disabled={loading || Boolean(recoveryBookingId) || !selectedSeats.length}>
+                            {loading ? "processing..." : lockExpiresAt ? "resume payment" : "book seats"}
                     </button>
             </div>
         );

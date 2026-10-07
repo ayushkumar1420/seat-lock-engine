@@ -8,22 +8,28 @@ const Seat = require("../modules/seat/seat.model")
 
 
 const razorpayWebhook = async (req, res) => {
-    const session = await mongoose.startSession();
+    let session = null;
     let razorpayOrderId = null;
+    let razorpayPaymentId = null;
+    let eventId = null;
 
     try {
         const signature = req.headers["x-razorpay-signature"];
-        const eventId = req.headers["x-razorpay-event-id"];
+        eventId = req.headers["x-razorpay-event-id"];
 
         console.log("=== WEBHOOK RECEIVED ===");
         console.log("Body Buffer:", Buffer.isBuffer(req.body));
         console.log("Event ID:", eventId);
 
-        if (!signature) {
-            console.error("Missing x-razorpay-signature header");
+        if (typeof signature !== "string" || !/^[a-fA-F0-9]{64}$/.test(signature)) {
+            console.error("Missing or invalid x-razorpay-signature header");
             return res.status(400).json({
-                message: "missing razorpay webhook signature", 
+                message: "missing or invalid razorpay webhook signature",
             });
+        }
+
+        if (eventId !== undefined && (typeof eventId !== "string" || !eventId.trim())) {
+            return res.status(400).json({ message: "invalid razorpay event id" });
         }
 
         if (!Buffer.isBuffer(req.body)) {
@@ -36,21 +42,25 @@ const razorpayWebhook = async (req, res) => {
         //req.body must be the raw request body buffer here 
         const generatedSignature = crypto.createHmac("sha256", process.env.RAZORPAY_WEBHOOK_SECRET)
         .update(req.body)
-        .digest("hex");
+        .digest();
 
-        if(generatedSignature !== signature) {
-            console.error("Webhook signature mismatch:", {
-                expected: generatedSignature,
-                received: signature,
-            });
+        if(!crypto.timingSafeEqual(generatedSignature, Buffer.from(signature, "hex"))) {
+            console.error("Webhook signature mismatch");
             return res.status(400).json({
                 message: "invalid webhook signature",
             });
         }
 
-        const payload = JSON.parse(
-            req.body.toString("utf8")
-        );
+        let payload;
+        try {
+            payload = JSON.parse(req.body.toString("utf8"));
+        } catch {
+            return res.status(400).json({ message: "invalid webhook JSON" });
+        }
+
+        if (!payload || typeof payload.event !== "string") {
+            return res.status(400).json({ message: "invalid webhook event" });
+        }
 
         console.log("Event:", payload.event);
 
@@ -64,17 +74,21 @@ const razorpayWebhook = async (req, res) => {
 
         const razorpayPayment = payload.payload?.payment?.entity;
         const razorpayOrder = payload.payload?.order?.entity;
-        razorpayOrderId = razorpayPayment?.order_id || razorpayOrder?.id;
-        const razorpayPaymentId = razorpayPayment?.id;
+        const orderId = razorpayPayment?.order_id || razorpayOrder?.id;
+        const paymentId = razorpayPayment?.id;
+
+        if(typeof orderId !== "string" || !orderId.trim() ||
+            typeof paymentId !== "string" || !paymentId.trim()){
+            return res.status(400).json({
+                message: "valid razorpay order id and payment id are required",
+            });
+        }
+
+        razorpayOrderId = orderId;
+        razorpayPaymentId = paymentId;
 
         console.log("Order ID:", razorpayOrderId);
         console.log("Payment ID:", razorpayPaymentId);
-
-        if(!razorpayOrderId){
-            return res.status(400).json({
-                message: "razorpay order id missing",
-            });
-        }
 
         //idempotency - if we have already processed this exact webhook event,
         //then return success without processing it again
@@ -108,6 +122,14 @@ const razorpayWebhook = async (req, res) => {
             });
         }
 
+        if(payment.status !== "CREATED"){
+            return res.status(200).json({
+                message: payment.status === "REFUND_REQUIRED"
+                    ? "captured payment requires refund reconciliation"
+                    : "payment already processed",
+            });
+        }
+
         const booking = await Booking.findById(payment.bookingId);
 
         if(!booking){
@@ -117,25 +139,25 @@ const razorpayWebhook = async (req, res) => {
             });
         }
 
-        //check krne k liye ki this user still owns all temporary seats lock or not
+        //check krne k liye ki this booking still owns all temporary seats lock or not
         const seatKeys = booking.seats.map((seat) => `seats:${booking.showtimeId}:${seat}`);
 
         const lockOwners = await Promise.all( seatKeys.map((key) => redis.get(key)));
 
         const ownsAllLocks = lockOwners.every((owner) => owner === booking._id.toString());
 
-        if (!ownsAllLocks) {
-            console.warn(`seat lock expired or ownership changed for booking ${booking._id}`);
+        if (!ownsAllLocks || booking.status !== "PENDING" || booking.expiresAt <= new Date()) {
+            console.warn(`Booking ${booking._id} is no longer pending, has expired, or lost its seat locks`);
 
-            const failedPayment = await Payment.updateOne({ _id: payment._id, status: "CREATED" },{
+            const refundPayment = await Payment.updateOne({ _id: payment._id, status: "CREATED" },{
                 $set: { 
-                    status: "FAILED",
+                    status: "REFUND_REQUIRED",
                     razorpayPaymentId: razorpayPaymentId || payment.razorpayPaymentId || null,
                     razorpayEventId: eventId || null,
                 },
             });
 
-            if (failedPayment.modifiedCount === 0) {
+            if (refundPayment.modifiedCount === 0) {
                 const latestPayment = await Payment.findById(payment._id);
 
                 if (latestPayment?.status === "SUCCESS"){
@@ -145,13 +167,18 @@ const razorpayWebhook = async (req, res) => {
                         message: "payment already finalized",
                     });
                 }
+
+                if (latestPayment?.status !== "REFUND_REQUIRED") {
+                    return res.status(200).json({ message: "payment already processed" });
+                }
             }
 
             return res.status(200).json({
-                message: "seat lock expired, payment marked for refund",
+                message: "booking cannot be fulfilled; captured payment requires refund reconciliation",
             });
         }
 
+        session = await mongoose.startSession();
         session.startTransaction();
 
         //har seat ko permanently reserve krne k liye
@@ -168,17 +195,17 @@ const razorpayWebhook = async (req, res) => {
 
             await session.abortTransaction();
             // If seats were already taken by someone else (e.g. late payment),
-            // we cannot book the seats. Mark payment as FAILED / refund needed.
-            const failedPayment = await Payment.updateOne(
+            // we cannot book the seats. Captured money needs refund reconciliation.
+            const refundPayment = await Payment.updateOne(
                 { _id: payment._id, status: "CREATED" }, {
                 $set: {
-                    status: "FAILED",
+                    status: "REFUND_REQUIRED",
                     razorpayPaymentId: razorpayPaymentId || payment.razorpayPaymentId || null,
                     razorpayEventId: eventId || null,
                 }
             });
 
-            if(failedPayment.modifiedCount === 0) {
+            if(refundPayment.modifiedCount === 0) {
                 const latestPayment = await Payment.findById(payment._id);
                 
                 if(latestPayment?.status === "SUCCESS"){
@@ -188,23 +215,30 @@ const razorpayWebhook = async (req, res) => {
                         message: "payment already finalized",
                     });
                 }
+
+                if (latestPayment?.status !== "REFUND_REQUIRED") {
+                    return res.status(200).json({ message: "payment already processed" });
+                }
             }
 
-            console.warn(`[PAYMENT CONFLICT]: Marked payment ${payment._id} as FAILED for refund.`);
+            console.warn(`[PAYMENT CONFLICT]: Payment ${payment._id} requires refund reconciliation.`);
             return res.status(200).json({
-                message: "one or more seats are no longer available; payment marked for refund",
+                message: "one or more seats are no longer available; captured payment requires refund reconciliation",
             });
         }
 
         const bookingResult = await Booking.updateOne({
             _id: booking._id,
             status: "PENDING",
+            expiresAt: { $gt: new Date() },
         }, {
             $set: { status: "SUCCESS" },
         }, { session });
 
         if (bookingResult.modifiedCount !== 1){
-            throw new Error("booking could not be finalized");
+            const error = new Error("booking could not be finalized");
+            error.code = "BOOKING_UNFULFILLABLE";
+            throw error;
         }
 
         const paymentResult = await Payment.updateOne({
@@ -248,29 +282,53 @@ const razorpayWebhook = async (req, res) => {
         });
 
     } catch (error) {
-        if (session.inTransaction()) {
-            await session.abortTransaction();
-        }
         console.error("razorpay webhook error:", error);
 
-        //another concurent webhook may have already completed the payment
-        if(razorpayOrderId !== "undefined" && razorpayOrderId){
-            const latestPayment = await Payment.findOne({ razorpayOrderId });
-
-            if(latestPayment?.status === "SUCCESS"){
-                console.log(`Payment ${latestPayment._id} was already finalized by another webhook`);
-
-                return res.status(200).json({
-                    message: "payment already finalized",
-                })
+        try {
+            if (session?.inTransaction()) {
+                await session.abortTransaction();
             }
+
+            //another concurrent webhook may have already completed the payment
+            if(razorpayOrderId){
+                const latestPayment = await Payment.findOne({ razorpayOrderId });
+
+                if(latestPayment?.status === "SUCCESS"){
+                    console.log(`Payment ${latestPayment._id} was already finalized by another webhook`);
+
+                    return res.status(200).json({
+                        message: "payment already finalized",
+                    });
+                }
+
+                if (error.code === "BOOKING_UNFULFILLABLE" && latestPayment) {
+                    await Payment.updateOne({ _id: latestPayment._id, status: "CREATED" }, {
+                        $set: {
+                            status: "REFUND_REQUIRED",
+                            razorpayPaymentId,
+                            razorpayEventId: eventId || null,
+                        },
+                    });
+                    const currentPayment = await Payment.findById(latestPayment._id);
+                    return res.status(200).json({
+                        message: currentPayment?.status === "SUCCESS"
+                            ? "payment already finalized"
+                            : currentPayment?.status === "REFUND_REQUIRED"
+                                ? "booking cannot be fulfilled; captured payment requires refund reconciliation"
+                                : "payment already processed",
+                    });
+                }
+            }
+        } catch (recoveryError) {
+            console.error("Webhook transaction rollback or payment recheck failed:", recoveryError);
         }
         return res.status(500).json({
             message: "webhook processing failed",
-            error: error.message,
         });
     } finally {
-        await session.endSession();
+        if (session) {
+            await session.endSession();
+        }
     }
 };
 

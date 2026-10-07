@@ -1,18 +1,22 @@
 const crypto = require("crypto");
+const mongoose = require("mongoose");
 const Booking = require("../modules/booking/booking.model");
 const Payment = require("../modules/payment/payment.model");
+const Showtime = require("../modules/catalog/showtime.model");
 const razorpay = require("../config/razorpay");
 
 const createPaymentOrder = async (req, res) => {
+    let claimedBookingId = null;
+    let createdOrderId = null;
     try {
-        const { bookingId } = req.body
+        const { bookingId } = req.body || {};
 
         //userid comes from verified JWT
         const userId = req.user.userId;
 
-        if( !bookingId || !userId ) {
+        if( typeof bookingId !== "string" || !mongoose.isObjectIdOrHexString(bookingId) ) {
             return res.status(400).json({
-                message: "bookingId is required",
+                message: "a valid bookingId is required",
             });
         }
 
@@ -34,70 +38,124 @@ const createPaymentOrder = async (req, res) => {
             });
         }
 
-        //prevent creating multiple active payment orders
-        const existingPayment = await Payment.findOne({
-            bookingId: booking._id,
-            status: "CREATED",
-        });
-
-        if (existingPayment){
-            return res.status(200).json({
-                message: "payment order already exist",
-                paymentId: existingPayment._id,
-                orderId: existingPayment.razorpayOrderId,
-                amount: Math.round(Number(existingPayment.amount) * 100),
-                currency: existingPayment.currency,
-                keyId: process.env.RAZORPAY_KEY_ID,
-                bookingId: booking._id,
+        const showtime = await Showtime.findById(booking.showtimeId);
+        if (!showtime || showtime.startTime <= new Date()) {
+            return res.status(409).json({
+                message: "showtime is no longer bookable",
             });
         }
 
         // razorpay expect krta h ki jo amount h wo paise me aaye
         // to uske liye rupee ko paise me convert krna pdega
         const amountInPaise = Math.round(Number(booking.totalAmount) * 100);
+        if (!Number.isSafeInteger(amountInPaise) || amountInPaise <= 0) {
+            return res.status(400).json({
+                message: "booking amount is invalid",
+            });
+        }
 
-        const order = await razorpay.orders.create({
-            amount: amountInPaise,
-            currency: "INR",
-            receipt: `booking_${booking._id}`,
-            notes: {
-                bookingId: booking._id.toString(),
-                userId,
-            },
-        });
-
-        const payment = await Payment.create({
+        const paymentFilter = {
             bookingId: booking._id,
-            userId,
-            amount: booking.totalAmount,
-            currency: "INR",
-            status: "CREATED",
-            razorpayOrderId: order.id,
-        });
+            status: { $in: ["CREATED", "SUCCESS", "REFUND_REQUIRED", "REFUNDED"] },
+        };
+        let payment = await Payment.findOne(paymentFilter).sort({ createdAt: -1 });
+        let created = false;
 
-        return res.status(201).json({
-            message: "payment order created",
+        if (!payment) {
+            // Claim in MongoDB before calling Razorpay so concurrent requests cannot create two orders.
+            const claimedBooking = await Booking.findOneAndUpdate({
+                _id: booking._id,
+                userId,
+                status: "PENDING",
+                expiresAt: { $gt: new Date() },
+                paymentOrderPending: { $ne: true },
+            }, {
+                $set: { paymentOrderPending: true },
+            }, { returnDocument: "after" });
+
+            if (claimedBooking) claimedBookingId = booking._id;
+
+            // A previous request may have saved its payment since the first lookup.
+            payment = await Payment.findOne(paymentFilter).sort({ createdAt: -1 });
+
+            if (!claimedBooking && !payment) {
+                return res.status(409).json({
+                    message: "payment order creation is pending; retry shortly or contact support if it persists",
+                });
+            }
+
+            if (claimedBooking && !payment) {
+                const order = await razorpay.orders.create({
+                    amount: amountInPaise,
+                    currency: "INR",
+                    receipt: `booking_${booking._id}`,
+                    notes: {
+                        bookingId: booking._id.toString(),
+                        userId,
+                    },
+                });
+                createdOrderId = order.id;
+
+                try {
+                    payment = await Payment.create({
+                        bookingId: booking._id,
+                        userId,
+                        amount: booking.totalAmount,
+                        currency: "INR",
+                        status: "CREATED",
+                        razorpayOrderId: order.id,
+                    });
+                    created = true;
+                } catch (error) {
+                    if (error.code !== 11000) throw error;
+                    payment = await Payment.findOne(paymentFilter).sort({ createdAt: -1 });
+                    if (!payment) throw error;
+                }
+            }
+
+            if (claimedBooking) {
+                await Booking.updateOne({ _id: booking._id }, {
+                    $set: { paymentOrderPending: false },
+                });
+                claimedBookingId = null;
+            }
+        }
+
+        if (payment.status !== "CREATED") {
+            return res.status(409).json({
+                message: "payment has already been processed; check booking status",
+            });
+        }
+
+        return res.status(created ? 201 : 200).json({
+            message: created ? "payment order created" : "payment order already exists",
             paymentId: payment._id,
-            orderId: order.id,
-            amount: order.amount,
-            currency: order.currency,
+            orderId: payment.razorpayOrderId,
+            amount: Math.round(Number(payment.amount) * 100),
+            currency: payment.currency,
             keyId: process.env.RAZORPAY_KEY_ID,
             bookingId: booking._id,
         })
 
     } catch (error) {
         console.error("payment order creation error", error);
+        if (claimedBookingId) {
+            // Keep the claim after an ambiguous gateway/save error; retrying could charge twice.
+            console.error("Payment order requires reconciliation before retry", {
+                bookingId: claimedBookingId,
+                razorpayOrderId: createdOrderId,
+            });
+        }
 
         return res.status(500).json({
-            message: "failed to create payment order",
-            error: error.message,
+            message: "payment order could not be confirmed; retry shortly or contact support if it persists",
         });
     }
 };
 
 const verifyPayment = async (req, res) => {
     try {
-        const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+        const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body || {};
 
         console.log("PAYMENT VERIFY RECEIVED:", {
             razorpay_order_id,
@@ -108,9 +166,11 @@ const verifyPayment = async (req, res) => {
         //userid comes from verifies jwt
         const userId = req.user.userId;
 
-        if ( !razorpay_order_id || !razorpay_payment_id || !razorpay_signature ) {
+        if ( typeof razorpay_order_id !== "string" || !/^order_[A-Za-z0-9]+$/.test(razorpay_order_id) ||
+             typeof razorpay_payment_id !== "string" || !/^pay_[A-Za-z0-9]+$/.test(razorpay_payment_id) ||
+             typeof razorpay_signature !== "string" || !/^[a-fA-F0-9]{64}$/.test(razorpay_signature) ) {
             return res.status(400).json({
-                message: "payment verification fields are required"
+                message: "valid payment verification fields are required"
             });
         }
 
@@ -131,13 +191,13 @@ const verifyPayment = async (req, res) => {
         .update(razorpay_order_id + "|" + razorpay_payment_id)
         .digest("hex");
 
-        const isValid = generatedSignature === razorpay_signature;
+        const isValid = crypto.timingSafeEqual(
+            Buffer.from(generatedSignature, "hex"),
+            Buffer.from(razorpay_signature, "hex")
+        );
 
         if(!isValid){
-            console.error("Payment signature mismatch:", {
-                expected: generatedSignature,
-                received: razorpay_signature,
-            });
+            console.error("Payment signature mismatch");
             return res.status(400).json({
                 message: "invalid payment signature"
             });
@@ -161,7 +221,6 @@ const verifyPayment = async (req, res) => {
 
         return res.status(500).json({
             message: "failed to verify payment",
-            error: error.message,
         });
         
     }

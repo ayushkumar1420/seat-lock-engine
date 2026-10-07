@@ -6,7 +6,7 @@ const Seat = require("../modules/seat/seat.model");
 const redis = require("../config/redis")
 
 const createShowtime = async (req, res) => {
-    const session = await mongoose.startSession();
+    let session;
 
     try {
         const {
@@ -14,7 +14,7 @@ const createShowtime = async (req, res) => {
             screenId,
             startTime,
             ticketPrice,
-        } = req.body
+        } = req.body || {};
 
         if ( !movieId || !screenId || !startTime || ticketPrice === undefined )
         {
@@ -23,13 +23,34 @@ const createShowtime = async (req, res) => {
             });
         }
 
+        if (typeof movieId !== "string" || !mongoose.isObjectIdOrHexString(movieId) ||
+            typeof screenId !== "string" || !mongoose.isObjectIdOrHexString(screenId)) {
+            return res.status(400).json({
+                message: "valid movieId and screenId are required",
+            });
+        }
+
+        if (typeof ticketPrice !== "number" || !Number.isFinite(ticketPrice) || ticketPrice <= 0) {
+            return res.status(400).json({
+                message: "ticketPrice must be a positive number",
+            });
+        }
+
+        const parsedStartTime = typeof startTime === "string" ? new Date(startTime) : null;
+        if (!parsedStartTime || Number.isNaN(parsedStartTime.getTime()) || parsedStartTime <= new Date()) {
+            return res.status(400).json({
+                message: "startTime must be a valid future date",
+            });
+        }
+
+        session = await mongoose.startSession();
         session.startTransaction();
 
         //create showtime
         const [showtime] = await Showtime.create(
             [
                 {
-                    movieId, screenId, startTime, ticketPrice,
+                    movieId, screenId, startTime: parsedStartTime, ticketPrice,
                 },
             ],
             {
@@ -51,7 +72,7 @@ const createShowtime = async (req, res) => {
         });
 
     } catch (error) {
-        if (session.inTransaction()) {
+        if (session?.inTransaction()) {
             await session.abortTransaction();
         }
 
@@ -62,13 +83,20 @@ const createShowtime = async (req, res) => {
         });
 
     } finally {
-        await session.endSession();
+        if (session) await session.endSession();
     }
 }
 
 const getShowtimeSeats = async (req, res) => {
     try {
         const { showtimeId } = req.params;
+
+        if (!mongoose.isObjectIdOrHexString(showtimeId)) {
+            return res.status(400).json({
+                message: "a valid showtimeId is required",
+            });
+        }
+
         const showtime = await Showtime.findById(showtimeId);
 
         if(!showtime) {
@@ -84,7 +112,7 @@ const getShowtimeSeats = async (req, res) => {
         
         //check temporary redis locks for every seat
         const lockValues = await Promise.all(
-            seats.map((seat) => redis.get(`seats:${showtimeId}:${seat.seatNumber}`))
+            seats.map((seat) => redis.get(`seats:${showtime._id}:${seat.seatNumber}`))
         );
 
         const seatsWithStatus = seats.map((seat, index) => ({
@@ -111,7 +139,7 @@ const getShowtimeSeats = async (req, res) => {
 
 const getShowtimes = async (req, res) => {
     try {
-        const showtimes = await Showtime.find()
+        const showtimes = await Showtime.find({ startTime: { $gt: new Date() } })
         .sort({ startTime: 1 });
 
         return res.status(200).json(showtimes);
