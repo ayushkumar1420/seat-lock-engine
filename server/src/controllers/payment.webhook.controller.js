@@ -9,6 +9,7 @@ const Seat = require("../modules/seat/seat.model")
 
 const razorpayWebhook = async (req, res) => {
     const session = await mongoose.startSession();
+    let razorpayOrderId = null;
 
     try {
         const signature = req.headers["x-razorpay-signature"];
@@ -63,7 +64,7 @@ const razorpayWebhook = async (req, res) => {
 
         const razorpayPayment = payload.payload?.payment?.entity;
         const razorpayOrder = payload.payload?.order?.entity;
-        const razorpayOrderId = razorpayPayment?.order_id || razorpayOrder?.id;
+        razorpayOrderId = razorpayPayment?.order_id || razorpayOrder?.id;
         const razorpayPaymentId = razorpayPayment?.id;
 
         console.log("Order ID:", razorpayOrderId);
@@ -252,6 +253,18 @@ const razorpayWebhook = async (req, res) => {
         }
         console.error("razorpay webhook error:", error);
 
+        //another concurent webhook may have already completed the payment
+        if(razorpayOrderId !== "undefined" && razorpayOrderId){
+            const latestPayment = await Payment.findOne({ razorpayOrderId });
+
+            if(latestPayment?.status === "SUCCESS"){
+                console.log(`Payment ${latestPayment._id} was already finalized by another webhook`);
+
+                return res.status(200).json({
+                    message: "payment already finalized",
+                })
+            }
+        }
         return res.status(500).json({
             message: "webhook processing failed",
             error: error.message,
