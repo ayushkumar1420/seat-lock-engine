@@ -376,10 +376,10 @@ if (closeButton) {
         console.log("booking page", { seats, selectedSeats });
 
         return (
-            <div className="app">
+            <div className="app booking-page">
                 <div className="user-info">
                     <p>Logged in as <strong>{user?.name}</strong></p>
-                    <button onClick={onLogout}>Logout</button>
+                    <button className="logout-button" onClick={onLogout}>Logout</button>
                 </div>
                 <h1>Select Seats</h1>
 
@@ -402,14 +402,14 @@ if (closeButton) {
                     ))}
                    </select>
 
-                   <p>₹{ticketPrice} per seat</p>
+                   <p className="ticket-price">₹{ticketPrice} per seat</p>
 
                    <SeatMap seats={seats} selectedSeats={selectedSeats} onSelect={selectSeat} />
 
-                   <p>Selected: {selectedSeats.length ? selectedSeats.join(", ") : "None"}</p>
-                   <h3>Total: ₹{totalAmount}</h3>
+                   <p className="selection-summary">Selected: {selectedSeats.length ? selectedSeats.join(", ") : "None"}</p>
+                   <h3 className="booking-total">Total: ₹{totalAmount}</h3>
 
-                   {paymentMessage && <p role="status">{paymentMessage}</p>}
+                   {paymentMessage && <p className="payment-status" role="status">{paymentMessage}</p>}
 
                    {lockExpiresAt && timeLeft > 0 && (
                     <div className="lock-timer">

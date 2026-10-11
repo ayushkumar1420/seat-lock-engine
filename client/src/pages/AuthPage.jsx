@@ -46,7 +46,7 @@ function AuthPage({ onLogin }) {
     };
 
     return (
-        <div className="app">
+        <div className="app auth-page">
             <h1> Seat Lock Engine </h1>
             <h2>{mode === "login" ? "login" : "register"}</h2>
 
@@ -82,7 +82,7 @@ function AuthPage({ onLogin }) {
                 </button>
             </form>
 
-            <button onClick={() => setMode(mode === "login" ? "register" : "login")}>
+            <button className="auth-switch" onClick={() => setMode(mode === "login" ? "register" : "login")}>
                 {mode === "login" ? "create account" : "already have an account? Login"}
             </button>
         </div>

@@ -1,4 +1,344 @@
-.seat.locked {
-    opacity: 0.5;
-    cursor: not-allowed;
+.app {
+  width: 100%;
+  min-width: 0;
+  padding: 40px;
+  border: 1px solid #28364b;
+  border-radius: 20px;
+  background: #111c2e;
+  box-shadow: 0 20px 60px #03081340;
+}
+
+.app h1,
+.app h2,
+.app h3,
+.app p {
+  margin: 0;
+}
+
+.app h1,
+.app h2 {
+  font-size: 30px;
+  font-weight: 650;
+  letter-spacing: -0.035em;
+  line-height: 1.2;
+}
+
+.app button,
+.app input,
+.app select {
+  min-width: 0;
+  min-height: 48px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  font: inherit;
+}
+
+.app button {
+  padding: 12px 20px;
+  background: #356ec0;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.app button:hover:not(:disabled) {
+  background: #3d7bd0;
+}
+
+.app button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.app :is(button, input, select):focus-visible {
+  outline: 3px solid #8fbcff;
+  outline-offset: 3px;
+}
+
+.app input,
+.app select {
+  width: 100%;
+  padding: 12px 14px;
+  border-color: #3a4a62;
+  background: #0c1627;
+  color: #edf3fc;
+  font-size: 16px;
+}
+
+.app input::placeholder {
+  color: #99aac1;
+  opacity: 1;
+}
+
+.app :is(input, select):hover:not(:disabled) {
+  border-color: #647b9c;
+}
+
+.app input:autofill {
+  box-shadow: 0 0 0 100px #0c1627 inset;
+  -webkit-text-fill-color: #edf3fc;
+  caret-color: #edf3fc;
+}
+
+.app select:disabled {
+  color: #99aac1;
+  cursor: not-allowed;
+}
+
+.auth-page {
+  max-width: 432px;
+  padding: 44px 36px 32px;
+  text-align: center;
+}
+
+.auth-page h1 {
+  margin-bottom: 28px;
+  color: #a4bce0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  line-height: 1.5;
+  text-transform: uppercase;
+}
+
+.auth-page h2 {
+  margin-bottom: 32px;
+  text-transform: capitalize;
+}
+
+.auth-form {
+  display: grid;
+  gap: 16px;
+}
+
+.auth-form button {
+  margin-top: 8px;
+  text-transform: capitalize;
+}
+
+.app .auth-switch {
+  width: 100%;
+  margin-top: 20px;
+  padding: 12px 8px;
+  background: transparent;
+  color: #a8c9f6;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.auth-switch::first-letter {
+  text-transform: uppercase;
+}
+
+.app .auth-switch:hover:not(:disabled) {
+  background: #192942;
+  color: #d3e5ff;
+}
+
+.booking-page {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 24px;
+  max-width: 960px;
+}
+
+.booking-page > :is(.user-info, h1, label, select, .ticket-price, .seat-map, .payment-status, .lock-timer, .book-button) {
+  grid-column: 1 / -1;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid #28364b;
+  color: #99aac1;
+  font-size: 14px;
+}
+
+.user-info p {
+  overflow-wrap: anywhere;
+}
+
+.user-info strong {
+  color: #edf3fc;
+  font-weight: 600;
+}
+
+.app .logout-button {
+  flex-shrink: 0;
+  min-height: 44px;
+  padding: 10px 16px;
+  border-color: #3a4a62;
+  background: transparent;
+  color: #cedbef;
+}
+
+.app .logout-button:hover:not(:disabled) {
+  background: #1c2d46;
+}
+
+.booking-page > h1 {
+  margin-top: 8px;
+}
+
+.booking-page > label {
+  margin-bottom: -16px;
+  color: #b9c8dd;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.booking-page .ticket-price {
+  margin-top: -16px;
+  color: #99aac1;
+  font-size: 13px;
+}
+
+.seat-map {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(48px, 1fr));
+  gap: 10px;
+  padding: 28px;
+  border: 1px solid #28364b;
+  border-radius: 12px;
+  background: #0c1627;
+}
+
+.app .seat {
+  min-height: 48px;
+  padding: 8px 4px;
+  border-color: #506886;
+  border-radius: 9px 9px 5px 5px;
+  background: #1a2b43;
+  color: #dae6f7;
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.app .seat:hover:not(:disabled) {
+  border-color: #8fbcff;
+  background: #263e60;
+}
+
+.app .seat:disabled {
+  opacity: 1;
+}
+
+.app .seat.selected {
+  border-color: #a6caff;
+  background: #356ec0;
+  color: #ffffff;
+  box-shadow: 0 0 0 1px #a6caff;
+}
+
+.app .seat.selected:hover:not(:disabled) {
+  background: #3d7bd0;
+}
+
+.app .seat.booked {
+  border-color: #2e3b50;
+  background: repeating-linear-gradient(135deg, #151f30, #151f30 5px, #1b283a 5px, #1b283a 7px);
+  color: #93a2b8;
+}
+
+.app .seat.locked {
+  border-color: #68563a;
+  background: #302b25;
+  color: #dfbd83;
+}
+
+.selection-summary {
+  align-self: center;
+  color: #b9c8dd;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.booking-total {
+  align-self: center;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  font-variant-numeric: tabular-nums;
+}
+
+.payment-status,
+.lock-timer {
+  padding: 18px 20px;
+  border: 1px solid #354b6b;
+  border-radius: 10px;
+  background: #17273f;
+  color: #c3d6f0;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.lock-timer {
+  text-align: center;
+}
+
+.lock-timer strong {
+  display: block;
+  margin: 8px 0;
+  color: #edf3fc;
+  font-size: 30px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.05em;
+}
+
+.lock-timer p::first-letter {
+  text-transform: uppercase;
+}
+
+.app .book-button {
+  justify-self: end;
+  min-width: 200px;
+  text-transform: capitalize;
+}
+
+@media (max-width: 600px) {
+  .app {
+    padding: 28px 20px;
+    border-radius: 16px;
+  }
+
+  .auth-page {
+    padding-top: 36px;
+  }
+
+  .booking-page {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+  }
+
+  .user-info {
+    align-items: flex-start;
+    font-size: 13px;
+  }
+
+  .seat-map {
+    gap: 8px;
+    padding: 16px;
+    grid-template-columns: repeat(auto-fit, minmax(40px, 1fr));
+  }
+
+  .app .seat {
+    min-height: 44px;
+    font-size: 12px;
+  }
+
+  .app .booking-total {
+    margin-top: -12px;
+  }
+
+  .app .book-button {
+    width: 100%;
+    min-width: 0;
+  }
 }
