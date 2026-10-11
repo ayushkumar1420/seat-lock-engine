@@ -8,7 +8,7 @@ const paymentWebhookRoutes = require("./src/modules/payment/payment.webhook.rout
 const authRoutes = require("./src/modules/auth/auth.routes.js");
 
 const app = express();
-
+app.set("trust proxy", 1);
 app.use(cors());
 
 //webhook pehle call hoga qki it needs raw body
