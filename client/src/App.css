@@ -118,6 +118,39 @@
   text-transform: capitalize;
 }
 
+.password-field {
+  position: relative;
+}
+
+.password-field input {
+  display: block;
+  padding-right: 54px;
+}
+
+.password-field input::-ms-reveal {
+  display: none;
+}
+
+.app .password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 5px;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 40px;
+  min-height: 40px;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  color: #99aac1;
+}
+
+.app .password-toggle:hover:not(:disabled) {
+  background: #192942;
+  color: #d3e5ff;
+}
+
 .app .auth-switch {
   width: 100%;
   margin-top: 20px;
